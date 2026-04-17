@@ -87,30 +87,1409 @@ NEXT_PUBLIC_APP_URL=
 ---
 
 ## Database — Core Tables (schema source of truth)
+[
+  {
+    "table_name": "admin_actions",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "action_type",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "admin_user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "target_user_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "target_venue_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "reason",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "metadata",
+    "data_type": "jsonb",
+    "is_nullable": "NO",
+    "column_default": "'{}'::jsonb"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "event_type",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "session_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "booking_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "token_amount",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "qr_hash",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "scan_method",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "scanned_by_user_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "kiosk_device_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "metadata",
+    "data_type": "jsonb",
+    "is_nullable": "NO",
+    "column_default": "'{}'::jsonb"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "slot_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "status",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": "'confirmed'::booking_status"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "guest_user_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "entry_qr_hash",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "entry_qr_expires_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "entry_qr_used",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "cancelled_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "penalty_applied",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "false"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "duration",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "status",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": "'active'::commitment_status"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "started_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "ends_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "discount_rate",
+    "data_type": "numeric",
+    "is_nullable": "NO",
+    "column_default": "0.10"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "broken_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "break_reason",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "compensation_tokens",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "f_table_catalog",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "f_table_schema",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "f_table_name",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "f_geography_column",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "coord_dimension",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "srid",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geography_columns",
+    "column_name": "type",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "f_table_catalog",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "f_table_schema",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "f_table_name",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "f_geometry_column",
+    "data_type": "name",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "coord_dimension",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "srid",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "geometry_columns",
+    "column_name": "type",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "name",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "device_token",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "is_active",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "last_seen_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "registered_by_user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "session_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "score",
+    "data_type": "smallint",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "note",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "booking_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "user_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "status",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": "'open'::session_status"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "entry_scanned_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "exit_scanned_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "auto_closed_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "tokens_deducted",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "peak_multiplier_used",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "commitment_discount",
+    "data_type": "numeric",
+    "is_nullable": "NO",
+    "column_default": "0"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "scan_method_entry",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "scan_method_exit",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "scanned_by_user_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "kiosk_device_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "venue_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "cycle_start",
+    "data_type": "date",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "cycle_end",
+    "data_type": "date",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "tokens_consumed",
+    "data_type": "integer",
+    "is_nullable": "NO",
+    "column_default": "0"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "payout_rate_inr",
+    "data_type": "integer",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "total_payout_inr",
+    "data_type": "integer",
+    "is_nullable": "NO",
+    "column_default": "0"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "status",
+    "data_type": "USER-DEFINED",
+    "is_nullable": "NO",
+    "column_default": "'pending'::settlement_status"
+  }
+]
 
-> **Replace this section with your actual `pg_dump --schema-only` output after Phase 1.**
+[
+  {
+    "table_name": "spatial_ref_sys",
+    "column_name": "srid"
+  },
+  {
+    "table_name": "users",
+    "column_name": "id"
+  },
+  {
+    "table_name": "users",
+    "column_name": "id"
+  },
+  {
+    "table_name": "venues",
+    "column_name": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "id"
+  },
+  {
+    "table_name": "venue_slots",
+    "column_name": "id"
+  },
+  {
+    "table_name": "token_bundles",
+    "column_name": "id"
+  },
+  {
+    "table_name": "token_ledger",
+    "column_name": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "id"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "id"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "id"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "id"
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "id"
+  },
+  {
+    "table_name": "venue_pricing",
+    "column_name": "id"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "id"
+  }
+]
 
-Planned tables (to be replaced with live SQL):
+[
+  {
+    "table_name": "sessions",
+    "column_name": "booking_id",
+    "foreign_table": "bookings",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "scanned_by_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "token_ledger",
+    "column_name": "session_id",
+    "foreign_table": "sessions",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "token_ledger",
+    "column_name": "booking_id",
+    "foreign_table": "bookings",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "session_id",
+    "foreign_table": "sessions",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "booking_id",
+    "foreign_table": "bookings",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "venues",
+    "column_name": "owner_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "venue_slots",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "token_ledger",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "token_ledger",
+    "column_name": "bundle_id",
+    "foreign_table": "token_bundles",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "slot_id",
+    "foreign_table": "venue_slots",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "guest_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "audit_log",
+    "column_name": "scanned_by_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "settlements",
+    "column_name": "approved_by_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "ratings",
+    "column_name": "session_id",
+    "foreign_table": "sessions",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "commitments",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "kiosk_devices",
+    "column_name": "registered_by_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "sessions",
+    "column_name": "kiosk_device_id",
+    "foreign_table": "kiosk_devices",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "venue_pricing",
+    "column_name": "venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "admin_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "target_user_id",
+    "foreign_table": "users",
+    "foreign_column": "id"
+  },
+  {
+    "table_name": "admin_actions",
+    "column_name": "target_venue_id",
+    "foreign_table": "venues",
+    "foreign_column": "id"
+  }
+]
 
-| Table | Purpose |
-|---|---|
-| `users` | Registered users, phone, profile |
-| `venues` | Gyms/studios, tier, location, status |
-| `venue_slots` | Bookable time slots per venue |
-| `bookings` | Slot reservations (no token deduction here) |
-| `sessions` | Active/closed check-in sessions |
-| `token_bundles` | Admin-configured bundle products |
-| `token_ledger` | Per-user token purchases and deductions (append-only) |
-| `audit_log` | Every scan, deduction, auto-close, governance action (append-only, never updated or deleted) |
-| `settlements` | Per-venue settlement cycles and payouts |
-| `ratings` | Post-session user ratings per venue |
-| `commitments` | User gym-level commitment records |
-| `kiosk_devices` | Registered kiosk tablets per venue |
-| `venue_pricing` | Dynamic pricing multipliers per venue per hour |
-| `guests` | Guest-access records linked to host bookings |
-| `admin_actions` | Governance log (warnings, re-audits, delistings, bans) |
-
----
+[
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "policyname": "users_select_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((auth_id = auth.uid()) OR (get_user_role() = 'admin'::user_role))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "policyname": "users_update_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(auth_id = auth.uid())",
+    "with_check": "((auth_id = auth.uid()) AND (role = 'user'::user_role))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "users",
+    "policyname": "users_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venues",
+    "policyname": "venues_public_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((status = 'active'::venue_status) OR (get_user_role() = ANY (ARRAY['admin'::user_role, 'gym_owner'::user_role])))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venues",
+    "policyname": "venues_owner_update",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((owner_user_id = get_user_id()) AND (get_user_role() = 'gym_owner'::user_role))",
+    "with_check": "((owner_user_id = get_user_id()) AND (tier = ( SELECT venues_1.tier\n   FROM venues venues_1\n  WHERE (venues_1.id = venues_1.id))))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venues",
+    "policyname": "venues_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_slots",
+    "policyname": "slots_public_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_slots",
+    "policyname": "slots_owner_write",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = venue_slots.venue_id) AND (v.owner_user_id = get_user_id()))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_slots",
+    "policyname": "slots_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "token_bundles",
+    "policyname": "bundles_public_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((is_active = true) OR (get_user_role() = 'admin'::user_role))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "token_bundles",
+    "policyname": "bundles_admin_write",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "token_ledger",
+    "policyname": "ledger_user_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((user_id = get_user_id()) OR (get_user_role() = 'admin'::user_role))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "token_ledger",
+    "policyname": "ledger_service_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(auth.role() = 'service_role'::text)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_user_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((user_id = get_user_id()) OR (guest_user_id = get_user_id()))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_user_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = get_user_id())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_user_cancel",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "((user_id = get_user_id()) AND (status = 'confirmed'::booking_status))",
+    "with_check": "(status = 'cancelled'::booking_status)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_gym_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = bookings.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "bookings",
+    "policyname": "bookings_service_update",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "UPDATE",
+    "qual": "(auth.role() = 'service_role'::text)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "sessions",
+    "policyname": "sessions_user_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(user_id = get_user_id())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "sessions",
+    "policyname": "sessions_gym_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = sessions.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "sessions",
+    "policyname": "sessions_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "sessions",
+    "policyname": "sessions_service_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(auth.role() = 'service_role'::text)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "audit_log",
+    "policyname": "audit_user_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(user_id = get_user_id())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "audit_log",
+    "policyname": "audit_gym_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = audit_log.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "audit_log",
+    "policyname": "audit_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "audit_log",
+    "policyname": "audit_service_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(auth.role() = 'service_role'::text)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "settlements",
+    "policyname": "settlements_gym_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = settlements.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "settlements",
+    "policyname": "settlements_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "ratings",
+    "policyname": "ratings_public_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "ratings",
+    "policyname": "ratings_user_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = get_user_id())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "ratings",
+    "policyname": "ratings_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "commitments",
+    "policyname": "commitments_user_own",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(user_id = get_user_id())",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "commitments",
+    "policyname": "commitments_user_insert",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(user_id = get_user_id())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "commitments",
+    "policyname": "commitments_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "kiosk_devices",
+    "policyname": "kiosk_gym_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = kiosk_devices.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "kiosk_devices",
+    "policyname": "kiosk_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "kiosk_devices",
+    "policyname": "kiosk_service_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(auth.role() = 'service_role'::text)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_pricing",
+    "policyname": "pricing_public_read",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(is_active = true)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_pricing",
+    "policyname": "pricing_gym_write",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "((get_user_role() = 'gym_owner'::user_role) AND (EXISTS ( SELECT 1\n   FROM venues v\n  WHERE ((v.id = venue_pricing.venue_id) AND (v.owner_user_id = get_user_id())))))",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "venue_pricing",
+    "policyname": "pricing_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "admin_actions",
+    "policyname": "admin_actions_admin_all",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(get_user_role() = 'admin'::user_role)",
+    "with_check": null
+  }
+]
 
 ## Business Rules — Non-Negotiable in Code
 
@@ -251,8 +1630,6 @@ Committed: Pulse Green (#27B06A)
 - [ ] Auth working (user phone OTP, gym email OTP)
 - [ ] Established conventions documented below
 
-**Live schema SQL:** *(paste `pg_dump --schema-only` output here after Phase 1)*
-
 ---
 
 ## Established Conventions
@@ -300,4 +1677,4 @@ Committed: Pulse Green (#27B06A)
 
 ---
 
-*Last updated: Phase 0 (pre-build). Update after each phase.*
+*Last updated: Phase 1. Update after each phase.*
