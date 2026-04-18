@@ -130,6 +130,14 @@ export default function GymLoginPage() {
           </>
         )}
       </div>
+
+      {process.env.NODE_ENV === 'development' && (
+        <p className="text-xs text-white/20 mt-10 text-center">
+          <a href="/dev-login" className="underline hover:text-white/40">
+            Dev: skip OTP →
+          </a>
+        </p>
+      )}
     </div>
   );
 }

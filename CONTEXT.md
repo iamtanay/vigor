@@ -1622,59 +1622,113 @@ Committed: Pulse Green (#27B06A)
 
 ## Current Status
 
-> **Update this section after every phase.**
+> Last updated: Phase 1 complete. Update after each phase.
 
-- [ ] Phase 1 complete
-- [ ] Schema exported and pasted below
-- [ ] Seed data live
-- [ ] Auth working (user phone OTP, gym email OTP)
-- [ ] Established conventions documented below
+### ✅ Phase 1 — Foundation (complete)
+
+| Item | Status | Notes |
+|---|---|---|
+| Supabase schema — all tables, enums, FK constraints | ✅ | `supabase/migrations/202604170001_initial_schema.sql` |
+| RLS policies — per-role, all tables | ✅ | `supabase/migrations/202604170002_rls_policies.sql` |
+| Append-only `audit_log` (no update/delete) | ✅ | Enforced via RLS: only `service_role` can insert |
+| Seed data — 3 venues, 3 users, token bundles, 7-day slots | ✅ | `supabase/seed.sql` |
+| Next.js app scaffold — App Router, Tailwind, TypeScript | ✅ | `apps/web/` |
+| User login page — `/login` | ✅ | Phone OTP flow (UI complete) |
+| Gym owner login page — `/gym/login` | ✅ | Email OTP flow (UI complete) |
+| Desktop → mobile redirect — `/mobile-only` | ✅ | Middleware handles UA detection |
+| Root `/` redirect to `/login` | ✅ | `apps/web/src/app/page.tsx` |
+| Auth middleware — protected routes + redirect guards | ✅ | `apps/web/src/middleware.ts` |
+| Supabase Auth callback — `/auth/callback` | ✅ | `apps/web/src/app/auth/callback/route.ts` |
+| `packages/lib` — Supabase clients, QR utils, token formula | ✅ | Browser, server, admin clients; HMAC signing; deduction formula |
+| `packages/types` — shared TypeScript interfaces | ✅ | All DB entities typed |
+| Dev login — `/dev-login` | ✅ | One-click login for all seed accounts; visible in dev only |
+| Phone OTP in production | ⏳ | Requires paid SMS provider (Twilio/MSG91) — deferred to pre-launch |
+| Email OTP in production | ⏳ | Works via Supabase built-in (3/hr limit on free plan) |
+
+### ⚠️ Production auth note
+Supabase free plan does not include SMS. Phone OTP requires a paid SMS provider (Twilio or MSG91). For all development and testing, use `/dev-login` which authenticates via email+password using the seed accounts. Wire up real SMS before go-live.
 
 ---
 
 ## Established Conventions
 
-> **Update this section as conventions emerge during the build.**
+> Locked after Phase 1. Do not change without updating this section.
 
-- [ ] Server actions vs API routes decision: *(e.g., "we use server actions for all mutations")*
-- [ ] Supabase client location: `/packages/lib/supabase/`
-- [ ] Shared types location: `/packages/types/`
-- [ ] Component primitives: shadcn/ui only — do not create custom primitives that duplicate shadcn
-- [ ] Loading spinner: `/packages/ui/spinner.tsx` — do not create new ones
-- [ ] All Supabase Edge Functions in: `supabase/functions/`
-- [ ] Mobile viewport lock: `max-w-[430px] mx-auto` on root layout; desktop redirect handled by Next.js middleware at `/middleware.ts`
+- **Mutations:** Server Actions for simple DB writes; API Routes (`/api/...`) for anything involving Edge Function calls or complex server logic (QR generation, token deduction).
+- **Supabase clients:**
+  - Browser (client components): `apps/web/src/lib/supabase/browser.ts` → `createClient()`
+  - Server (server components, route handlers, middleware): `apps/web/src/lib/supabase/server.ts` → `createClient()`
+  - Admin / service role (Edge Functions only, never client): `packages/lib/supabase/admin.ts` → `createAdminClient()`
+- **Shared types:** `packages/types/index.ts` — all DB entity interfaces live here. Import as `import type { Venue, Booking } from '@vigor/types'`.
+- **Shared logic:** `packages/lib/` — token formula, QR signing, Supabase clients. Import as `import { calculateDeduction } from '@vigor/lib/tokens/formula'`.
+- **Component primitives:** Use Tailwind utility classes directly for Phase 1–2 screens. shadcn/ui components to be added to `packages/ui/` progressively — do not create one-off custom primitives.
+- **Mobile viewport:** All user-facing pages (`/app/...`) must use `className="mobile-viewport"` on the root div (defined in `globals.css` as `max-width: 430px; margin: 0 auto`). Desktop users hitting `/app/...` are rewritten to `/mobile-only` by middleware.
+- **Edge Functions:** All server-side crypto, token deduction, and audit log writes go in `supabase/functions/`. Never perform these in client components or unprotected API routes.
+- **Dev login:** `/dev-login` is gated by `process.env.NODE_ENV === 'development'` in the UI. The route itself is always accessible — do not rely on this for security. Remove or hard-gate before production.
+- **Styling:** Vigor design tokens are defined in `tailwind.config.ts` (`deep-space`, `card-dark`, `vigor-violet`, `pulse-green`, `burn-coral`, `tempo-amber`) and as CSS variables in `globals.css`. Always use tokens, never raw hex in className.
 
 ---
 
 ## Folder Structure
 
-> **Update this as the repo is scaffolded.**
+> Reflects actual repo state after Phase 1.
 
 ```
 /
 ├── apps/
-│   ├── web/                    # Next.js — Admin Center + Gym Dashboard + Landing
-│   │   ├── app/
-│   │   │   ├── (admin)/        # Admin Center routes
-│   │   │   ├── (gym)/          # Gym Dashboard routes
-│   │   │   ├── (user)/         # User PWA routes (mobile-only)
-│   │   │   └── middleware.ts   # Mobile detection + auth guards
-│   │   └── ...
-│   └── mobile/                 # React Native — future
+│   └── web/                              # Next.js 15 — all portals
+│       ├── src/
+│       │   ├── app/
+│       │   │   ├── page.tsx              # Root → redirects to /login
+│       │   │   ├── layout.tsx            # Root layout (Inter font, dark bg)
+│       │   │   ├── globals.css           # Tailwind directives + design tokens + animations
+│       │   │   ├── login/                # User phone OTP login
+│       │   │   ├── gym/login/            # Gym owner email OTP login
+│       │   │   ├── mobile-only/          # Desktop fallback page
+│       │   │   ├── dev-login/            # ⚠️ Dev only — one-click seed account login
+│       │   │   ├── auth/callback/        # Supabase Auth code exchange
+│       │   │   ├── app/                  # 🔲 User PWA (Phase 2)
+│       │   │   ├── gym/                  # 🔲 Gym dashboard (Phase 4)
+│       │   │   └── admin/               # 🔲 Admin center (Phase 5)
+│       │   ├── lib/
+│       │   │   └── supabase/
+│       │   │       ├── browser.ts        # Browser Supabase client
+│       │   │       └── server.ts         # Server Supabase client
+│       │   └── middleware.ts             # Auth guards + mobile detection
+│       ├── public/
+│       │   └── manifest.json             # PWA manifest
+│       ├── tailwind.config.ts            # Vigor design tokens
+│       ├── postcss.config.cjs            # PostCSS (CJS — required by "type":"module")
+│       ├── next.config.ts
+│       ├── package.json                  # next@15.3.1, lucide-react@^0.469.0
+│       └── .env.local.example            # Copy to .env.local and fill in
+│
 ├── packages/
-│   ├── ui/                     # Shared shadcn/ui components
+│   ├── ui/                               # Shared component primitives (stub — Phase 2+)
 │   ├── lib/
-│   │   ├── supabase/           # Supabase clients (browser + server + admin)
-│   │   ├── qr/                 # QR generation + validation utilities
-│   │   └── tokens/             # Token deduction formula helpers
-│   └── types/                  # Shared TypeScript interfaces
+│   │   ├── index.ts                      # Barrel export
+│   │   ├── supabase/
+│   │   │   ├── browser.ts
+│   │   │   ├── server.ts
+│   │   │   └── admin.ts                  # Service role client (Edge Functions only)
+│   │   ├── qr/
+│   │   │   └── hmac.ts                   # HMAC-SHA256 sign/verify, QR string builders
+│   │   └── tokens/
+│   │       └── formula.ts                # calculateDeduction(), tier base rates, multiplier clamps
+│   └── types/
+│       └── index.ts                      # All shared TypeScript interfaces
+│
 ├── supabase/
-│   ├── migrations/             # All schema migrations (version-controlled)
-│   ├── functions/              # Edge Functions
-│   └── seed.sql                # Seed data script
-└── CONTEXT.md                  # ← this file
+│   ├── migrations/
+│   │   ├── 202604170001_initial_schema.sql
+│   │   └── 202604170002_rls_policies.sql
+│   ├── seed.sql                          # 3 venues, 3 users, token bundles, 7-day slots
+│   ├── fix_auth_passwords.sql            # Run if dev-login gives "Invalid credentials"
+│   └── config.toml
+│
+└── CONTEXT.md                            # ← this file — paste at top of every session
 ```
 
 ---
 
-*Last updated: Phase 1. Update after each phase.*
+*Last updated: Phase 1 complete — April 2026.*
