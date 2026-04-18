@@ -7,7 +7,6 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 export const metadata: Metadata = {
   title: 'Vigor — Your Fitness Everywhere',
   description: 'Token-based fitness marketplace. Access any gym, anytime.',
-  manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Vigor' },
 };
 

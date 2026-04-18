@@ -1606,7 +1606,7 @@ Committed: Pulse Green (#27B06A)
 
 | Phase | Title | Est. Duration | Status |
 |---|---|---|---|
-| P1 | Foundation — schema, auth, seed data | ~1 week | 🔲 Not started |
+| P1 | Foundation — schema, auth, seed data | ~1 week | ✅ Complete |
 | P2 | User mobile web — browse, book, wallet | ~1.5 weeks | 🔲 Not started |
 | P3 | QR system — entry, exit, session lifecycle | ~1.5 weeks | 🔲 Not started |
 | P4 | Gym owner portal — dashboard, sessions, settlements | ~1 week | 🔲 Not started |

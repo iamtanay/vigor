@@ -3,15 +3,19 @@
 @tailwind utilities;
 
 :root {
-  --color-deep-space: #1A1A2E;
-  --color-card-dark: #23233A;
-  --color-vigor-violet: #6C63FF;
-  --color-pulse-green: #39D98A;
-  --color-burn-coral: #FF6B6B;
-  --color-tempo-amber: #FFD166;
-  --color-frost: #F5F4FF;
+  --color-deep-space:    #1A1A2E;
+  --color-card-dark:     #23233A;
+  --color-vigor-violet:  #6C63FF;
+  --color-pulse-green:   #39D98A;
+  --color-burn-coral:    #FF6B6B;
+  --color-tempo-amber:   #FFD166;
+  --color-frost:         #F5F4FF;
   --color-light-surface: #EEEEFF;
 }
+
+/* Base reset */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 
 /* Mobile viewport lock for user PWA */
 .mobile-viewport {
@@ -22,12 +26,11 @@
   overflow-x: hidden;
 }
 
-/* Card animations */
+/* Card entrance animation */
 @keyframes cardEnter {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
 .card-enter {
   animation: cardEnter 200ms ease-out forwards;
 }
@@ -35,9 +38,8 @@
 /* Token counter flash */
 @keyframes tokenFlash {
   0%, 100% { color: var(--color-pulse-green); }
-  50% { color: var(--color-tempo-amber); }
+  50%       { color: var(--color-tempo-amber); }
 }
-
 .token-deduct-flash {
   animation: tokenFlash 400ms ease-in-out;
 }
@@ -48,17 +50,15 @@
   30%  { background-color: rgba(57, 217, 138, 0.3); }
   100% { background-color: transparent; }
 }
-
 .qr-success-bloom {
   animation: qrBloom 600ms ease-out;
 }
 
 /* Page slide transition */
-.page-slide-in {
-  animation: slideIn 250ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0.8; }
-  to   { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.page-slide-in {
+  animation: slideIn 250ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
