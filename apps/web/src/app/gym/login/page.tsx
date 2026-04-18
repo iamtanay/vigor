@@ -1,5 +1,7 @@
 'use client';
 
+import VigorLogo from '@/components/VigorLogo';
+
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/browser';
 import { useRouter } from 'next/navigation';
@@ -55,21 +57,8 @@ export default function GymLoginPage() {
   return (
     <div className="min-h-screen bg-[#0D0D1A] flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-[#1A1A2E] rounded-xl flex items-center justify-center">
-            <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
-              <path d="M6 22 L14 6 L22 22" stroke="#6C63FF" strokeWidth="3"
-                    strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9.5 15.5 L18.5 15.5" stroke="#39D98A" strokeWidth="2.5"
-                    strokeLinecap="round" />
-            </svg>
-          </div>
-          <div>
-            <div className="text-xl font-medium tracking-[-0.02em]">
-              <span className="text-vigor-violet">V</span>igor
-            </div>
-            <div className="text-xs text-white/30">Gym Dashboard</div>
-          </div>
+        <div style={{ marginBottom: 32 }}>
+          <VigorLogo height={30} />
         </div>
 
         {step === 'email' ? (

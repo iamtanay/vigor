@@ -1,159 +1,132 @@
-# Turborepo starter
+# Vigor
 
-This Turborepo starter is maintained by the Turborepo core team.
+A token-based fitness marketplace for India. Buy a token bundle, spend them at any gym on the platform — no locked-in memberships.
 
-## Using this example
+---
 
-Run the following command:
+## What it is
 
-```sh
-npx create-turbo@latest
+Users purchase token bundles and use them to book slots at partner venues (gyms, yoga studios, CrossFit boxes, pools). Venues get paid per token consumed at the end of each settlement cycle. Vigor earns the margin.
+
+Three portals, one Next.js app:
+- **User PWA** — mobile-only web app at `/app`
+- **Gym Dashboard** — venue owner portal at `/gym`
+- **Admin Center** — internal ops at `/admin`
+
+---
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 15 App Router · TypeScript · Tailwind CSS |
+| Backend | Supabase (Postgres + Auth + Realtime + Edge Functions) |
+| Monorepo | Turborepo |
+| Payments | Razorpay (Phase 5) |
+| Notifications | Firebase Cloud Messaging (Phase 5) |
+
+---
+
+## Getting started
+
+### Prerequisites
+- Node.js 20+
+- [Supabase CLI](https://supabase.com/docs/guides/cli)
+- A Supabase project (free tier works)
+
+### 1. Install dependencies
+```bash
+npm install
 ```
 
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+### 2. Configure environment
+```bash
+cp apps/web/.env.local.example apps/web/.env.local
+# Fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
 ```
 
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo build
-npm dlx turbo build
-npm exec turbo build
+### 3. Set up the database
+```bash
+# Apply all migrations + seed
+supabase db reset
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 4. Fix auth passwords (run once after seeding)
+Open `supabase/fix_auth_passwords.sql` in the Supabase SQL editor and run it.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+### 5. Start the dev server
+```bash
+npm run dev
+# → http://localhost:3000
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
+## Development login
+
+Phone OTP requires a paid SMS provider. Skip it in dev:
+
+```
+http://localhost:3000/dev-login
 ```
 
-### Develop
+| Account | Email | Role | Tokens |
+|---|---|---|---|
+| Ananya Sharma | user1@joinvigor.co | User | 148 |
+| Karan Mehta | user2@joinvigor.co | User | 85 |
+| Sneha Iyer | user3@joinvigor.co | User | 32 |
+| Iron Republic | owner@ironrepublic.in | Gym owner · Gold | — |
+| Centurion Fitness | owner@centurionfitness.in | Gym owner · Silver | — |
+| Fit Zone | owner@fitzone.in | Gym owner · Bronze | — |
+| Admin | admin@joinvigor.co | Admin | — |
 
-To develop all apps and packages, run the following command:
+All passwords: `Password123!`
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+---
 
-```sh
-cd my-turborepo
-turbo dev
+## Project structure
+
+```
+/apps/web          Next.js app — all three portals
+/packages/types    Shared TypeScript interfaces
+/packages/lib      Supabase clients, token formula, QR utils
+/supabase          Migrations, Edge Functions, seed data
 ```
 
-Without global `turbo`, use your package manager:
+---
 
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
+## Token economics
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+- **Base rates:** Bronze 6t · Silver 10t · Gold 15t per session
+- **Peak hours:** 6–9 AM and 5–9 PM at 1.5× multiplier
+- **Deducted at exit** — never at booking
+- **Cancellation < 2 hrs before slot:** 1 token penalty
+- **No-show:** 1 token penalty
+- **Bundle expiry:** 15-day grace period at 50% value, then full lapse
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo dev --filter=web
-```
+## Build phases
 
-Without global `turbo`:
+| Phase | Description | Status |
+|---|---|---|
+| P1 | Schema · Auth · Seed data | ✅ Complete |
+| P2 | User PWA — browse, book, wallet, activity | ✅ Complete |
+| P3 | QR system — entry/exit, session lifecycle | 🔲 Next |
+| P4 | Gym owner portal — dashboard, settlements | 🔲 |
+| P5 | Ratings · Razorpay · Production hardening | 🔲 |
 
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
+---
 
-### Remote Caching
+## Key rules (enforced in code)
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+1. Tokens deducted **at exit only** — never at booking
+2. Entry QR: single-use, expires 15 min after slot start
+3. Exit QR: refreshes every 60 seconds
+4. Sessions auto-close after 4 hours
+5. `audit_log` rows are **never updated or deleted**
+6. Settlements require manual Admin approval
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+---
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+*Built with [Supabase](https://supabase.com) and [Next.js](https://nextjs.org)*

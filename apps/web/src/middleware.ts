@@ -23,8 +23,8 @@ export async function middleware(request: NextRequest) {
   const ua = request.headers.get('user-agent') ?? '';
   const isMobile = /android|iphone|ipad|ipod|mobile/i.test(ua);
 
-  // ── Desktop trying to reach PWA
-  if (pathname.startsWith(PWA_ROUTE_PREFIX) && !isMobile) {
+  // ── Desktop trying to reach PWA (API routes are always passthrough)
+  if (pathname.startsWith(PWA_ROUTE_PREFIX) && !isMobile && !pathname.startsWith("/api")) {
     return NextResponse.rewrite(new URL('/mobile-only', request.url));
   }
 

@@ -1,57 +1,25 @@
+import VigorLogo from '@/components/VigorLogo';
+
 export default function MobileOnlyPage() {
   return (
-    <div className="min-h-screen bg-deep-space flex flex-col items-center justify-center p-8 text-center">
-      <div className="mb-8">
-        <svg width="64" height="64" viewBox="0 0 28 28" fill="none">
-          <path
-            d="M6 22 L14 6 L22 22"
-            stroke="#6C63FF"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M9.5 15.5 L18.5 15.5"
-            stroke="#39D98A"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-          />
-        </svg>
+    <div style={{ minHeight: '100vh', background: '#0D0D1A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center' }}>
+      <div style={{ marginBottom: 32 }}>
+        <VigorLogo height={36} />
       </div>
-
-      <h1 className="text-2xl font-medium text-white mb-3 tracking-[-0.02em]">
-        Open Vigor on your phone
+      <h1 style={{ fontSize: 22, fontWeight: 500, color: '#fff', letterSpacing: '-0.02em', marginBottom: 12 }}>
+        Open on your phone
       </h1>
-
-      <p className="text-sm text-white/50 max-w-xs leading-relaxed mb-8">
-        The Vigor member app is designed for mobile. Scan the QR code below
-        or open this link on your phone to get started.
+      <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.4)', maxWidth: 320, lineHeight: 1.6 }}>
+        Vigor is built for mobile. Scan the QR code or open{' '}
+        <strong style={{ color: 'rgba(255,255,255,0.65)' }}>joinvigor.co</strong>{' '}
+        on your phone to get started.
       </p>
-
-      <div className="bg-white rounded-2xl p-4 mb-6">
-        <div className="w-32 h-32 bg-[#1A1A2E] rounded-lg flex items-center justify-center">
-          <span className="text-vigor-violet text-xs text-center px-2">
-            QR Code to joinvigor.co/app
-          </span>
+      <div style={{ marginTop: 40, padding: '32px', background: '#1A1A2E', borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)' }}>
+        {/* QR placeholder — replace with real QR in production */}
+        <div style={{ width: 120, height: 120, background: 'rgba(108,99,255,0.12)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>
+          QR code
         </div>
       </div>
-
-      <a
-        href="https://joinvigor.co/app"
-        className="text-vigor-violet text-sm underline underline-offset-4"
-      >
-        joinvigor.co/app
-      </a>
-
-      <p className="text-xs text-white/25 mt-8">
-        Gym owner?{' '}
-        <a
-          href="/gym/login"
-          className="text-white/40 hover:text-white/60 underline"
-        >
-          Log in to your dashboard →
-        </a>
-      </p>
     </div>
   );
 }
