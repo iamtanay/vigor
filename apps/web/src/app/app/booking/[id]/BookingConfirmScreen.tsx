@@ -10,12 +10,21 @@ export default function BookingConfirmScreen({ booking }: Props) {
   const router = useRouter();
   const [cancelling, setCancelling] = useState(false);
   const [cancelled, setCancelled] = useState(booking.status === 'cancelled');
+  const [generatingQR, setGeneratingQR] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
 
   const slot = booking.venue_slots;
   const venue = booking.venues;
   const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}`) : null;
   const hoursUntil = slotDt ? (slotDt.getTime() - Date.now()) / 3600000 : 0;
   const canCancelFree = hoursUntil > 2;
+
+  // Show QR button if slot is within 30 min of start (entry window)
+  const slotStarted = slotDt ? slotDt.getTime() <= Date.now() : false;
+  const slotInWindow = slotDt
+    ? slotDt.getTime() <= Date.now() + 30 * 60 * 1000 && slotDt.getTime() >= Date.now() - 15 * 60 * 1000
+    : false;
+  const isCompleted = booking.status === 'completed';
 
   async function handleCancel() {
     if (!confirm(canCancelFree ? 'Cancel this booking?' : 'Cancelling now will deduct 1 token penalty. Continue?')) return;
@@ -27,8 +36,31 @@ export default function BookingConfirmScreen({ booking }: Props) {
     } finally { setCancelling(false); }
   }
 
-  const statusColor = cancelled ? '#FF6B6B' : booking.status === 'completed' ? '#39D98A' : '#6C63FF';
-  const statusLabel = cancelled ? 'Cancelled' : booking.status === 'completed' ? 'Completed' : 'Confirmed';
+  async function handleGetEntryQR() {
+    setGeneratingQR(true);
+    setQrError(null);
+    try {
+      const res = await fetch('/api/sessions/generate-entry-qr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setQrError(data.error || 'Failed to generate QR');
+        return;
+      }
+      // Navigate to session screen which will show entry QR
+      router.push(`/app/session?bookingId=${booking.id}`);
+    } catch {
+      setQrError('Network error. Please try again.');
+    } finally {
+      setGeneratingQR(false);
+    }
+  }
+
+  const statusColor = cancelled ? '#FF6B6B' : isCompleted ? '#39D98A' : '#6C63FF';
+  const statusLabel = cancelled ? 'Cancelled' : isCompleted ? 'Completed' : 'Confirmed';
 
   return (
     <div className="page-slide-in" style={{ padding: '16px 20px 20px' }}>
@@ -51,7 +83,7 @@ export default function BookingConfirmScreen({ booking }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 28,
         }}>
-          {cancelled ? '✕' : booking.status === 'completed' ? '✓' : '✓'}
+          {cancelled ? '✕' : isCompleted ? '✓' : '✓'}
         </div>
         <div style={{ fontSize: 20, fontWeight: 500, color: '#fff', marginBottom: 4 }}>
           Booking {statusLabel}
@@ -61,69 +93,138 @@ export default function BookingConfirmScreen({ booking }: Props) {
         </div>
       </div>
 
-      {/* Details card */}
+      {/* Venue + slot details */}
       <div style={{
         background: 'var(--color-card-dark)',
-        borderRadius: 16, padding: '20px',
-        border: '0.5px solid rgba(255,255,255,0.06)',
-        marginBottom: 16,
+        borderRadius: 16, padding: '16px 18px', marginBottom: 16,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 500, color: '#fff' }}>{venue?.name}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{venue?.address}</div>
+            <div style={{ fontSize: 16, fontWeight: 500, color: '#fff', marginBottom: 4 }}>
+              {venue?.name ?? 'Venue'}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{venue?.address}</div>
           </div>
-          {venue?.tier && <TierBadge tier={venue.tier} />}
+          <TierBadge tier={venue?.tier} />
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Row label="Date" value={slot?.slot_date} />
-          <Row label="Time" value={`${slot?.start_time?.slice(0,5)} – ${slot?.end_time?.slice(0,5)}`} />
-          <Row label="Status" value={statusLabel} valueColor={statusColor} />
-        </div>
+        {slot && (
+          <div style={{ display: 'flex', gap: 12, paddingTop: 12, borderTop: '0.5px solid rgba(255,255,255,0.07)' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Date</div>
+              <div style={{ fontSize: 13, color: '#fff', marginTop: 2 }}>
+                {new Date(slot.slot_date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Time</div>
+              <div style={{ fontSize: 13, color: '#fff', marginTop: 2 }}>
+                {slot.start_time?.slice(0, 5)} – {slot.end_time?.slice(0, 5)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Info */}
-      <div style={{
-        background: 'rgba(108,99,255,0.08)',
-        border: '1px solid rgba(108,99,255,0.2)',
-        borderRadius: 12, padding: '14px 16px',
-        marginBottom: 20,
-      }}>
-        <div style={{ fontSize: 13, color: '#A09BFF', fontWeight: 500, marginBottom: 6 }}>
-          💡 How to check in
+      {/* Check-in instructions */}
+      {!cancelled && !isCompleted && (
+        <div style={{
+          background: 'rgba(108,99,255,0.08)',
+          border: '1px solid rgba(108,99,255,0.2)',
+          borderRadius: 14, padding: '14px 16px', marginBottom: 16,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: '#6C63FF', marginBottom: 8 }}>How to check in</div>
+          {[
+            { icon: '📱', text: 'Tap "Get Entry QR" below when you arrive (available 15 min before slot start)' },
+            { icon: '🔍', text: 'Show the QR code to staff — it\'s single-use and expires 15 min after slot start' },
+            { icon: '🏋️', text: 'Work out — tokens are NOT deducted at check-in' },
+            { icon: '📤', text: 'Tap "Session" in the bottom nav when leaving to show your Exit QR' },
+          ].map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 0' }}>
+              <span style={{ fontSize: 15 }}>{item.icon}</span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>{item.text}</span>
+            </div>
+          ))}
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
-          When you arrive, go to <strong style={{ color: '#A09BFF' }}>ActiVity</strong> tab to get your entry QR code.
-          Tokens are only deducted when you exit.
-        </div>
-      </div>
-
-      {/* Cancel button */}
-      {!cancelled && booking.status === 'confirmed' && (
-        <button
-          onClick={handleCancel}
-          disabled={cancelling}
-          style={{
-            width: '100%', padding: '13px',
-            background: 'transparent',
-            border: '1px solid rgba(255,107,107,0.3)',
-            borderRadius: 12, color: '#FF6B6B',
-            fontSize: 14, cursor: 'pointer',
-          }}
-        >
-          {cancelling ? 'Cancelling...' : canCancelFree ? 'Cancel booking (free)' : 'Cancel booking (1 token penalty)'}
-        </button>
       )}
-    </div>
-  );
-}
 
-function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 500, color: valueColor ?? '#fff' }}>{value}</span>
+      {/* QR error */}
+      {qrError && (
+        <div style={{
+          background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)',
+          borderRadius: 10, padding: '10px 14px', marginBottom: 12,
+          color: '#FF6B6B', fontSize: 13,
+        }}>
+          {qrError}
+        </div>
+      )}
+
+      {/* Actions */}
+      {!cancelled && !isCompleted && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+          {/* Get Entry QR — always visible for upcoming confirmed bookings */}
+          {!booking.entry_qr_used && (
+            <button
+              onClick={handleGetEntryQR}
+              disabled={generatingQR}
+              style={{
+                background: '#6C63FF', color: '#fff', border: 'none',
+                borderRadius: 24, padding: '14px', width: '100%',
+                fontSize: 15, fontWeight: 500, cursor: generatingQR ? 'not-allowed' : 'pointer',
+                opacity: generatingQR ? 0.7 : 1,
+              }}
+            >
+              {generatingQR ? 'Generating…' : '📱 Get Entry QR'}
+            </button>
+          )}
+
+          {/* Already used */}
+          {booking.entry_qr_used && (
+            <button
+              onClick={() => router.push('/app/session')}
+              style={{
+                background: '#39D98A', color: '#0D1A0D', border: 'none',
+                borderRadius: 24, padding: '14px', width: '100%',
+                fontSize: 15, fontWeight: 500, cursor: 'pointer',
+              }}
+            >
+              📤 View Active Session & Exit QR
+            </button>
+          )}
+
+          {/* Cancel button */}
+          <button
+            onClick={handleCancel}
+            disabled={cancelling}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${canCancelFree ? 'rgba(255,255,255,0.15)' : 'rgba(255,107,107,0.3)'}`,
+              color: canCancelFree ? 'rgba(255,255,255,0.5)' : '#FF6B6B',
+              borderRadius: 24, padding: '12px', width: '100%',
+              fontSize: 14, cursor: cancelling ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {cancelling ? 'Cancelling…' : canCancelFree ? 'Cancel booking (free)' : 'Cancel (1 token penalty)'}
+          </button>
+        </div>
+      )}
+
+      {isCompleted && (
+        <div style={{ textAlign: 'center', padding: '16px 0' }}>
+          <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+            Session completed ✓
+          </div>
+          <button
+            onClick={() => router.push('/app/explore')}
+            style={{
+              background: '#6C63FF', color: '#fff', border: 'none',
+              borderRadius: 24, padding: '14px 28px',
+              fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            }}
+          >
+            Book another session
+          </button>
+        </div>
+      )}
     </div>
   );
 }

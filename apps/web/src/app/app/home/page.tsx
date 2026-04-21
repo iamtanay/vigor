@@ -7,75 +7,77 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Fetch user profile
   const { data: profile } = await supabase
     .from('users')
-    .select('id, name, role')
+    .select('id, name')
     .eq('auth_id', user.id)
     .single();
-
   if (!profile) redirect('/login');
 
-  // Fetch token balance (sum of positive ledger entries minus deductions)
+  // Venues
+  const { data: venues } = await supabase
+    .from('venues')
+    .select('id, name, tier, city, address, opening_time, closing_time, avg_rating, amenities, activity_types')
+    .eq('status', 'active')
+    .order('avg_rating', { ascending: false })
+    .limit(4);
+
+  // Token balance + earliest expiry
   const { data: ledger } = await supabase
     .from('token_ledger')
-    .select('amount, expires_at, grace_expires_at')
+    .select('amount, ledger_type, expires_at')
     .eq('user_id', profile.id)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false });
 
-  let availableTokens = 0;
+  let balance = 0;
   let earliestExpiry: string | null = null;
-  const now = new Date();
-
-  if (ledger) {
-    for (const entry of ledger) {
-      if (entry.expires_at && new Date(entry.expires_at) < now) {
-        // Check grace period
-        if (entry.grace_expires_at && new Date(entry.grace_expires_at) > now && entry.amount > 0) {
-          availableTokens += Math.floor(entry.amount * 0.5);
-        }
-        // else lapsed
-      } else {
-        availableTokens += entry.amount;
+  for (const row of ledger ?? []) {
+    if (['purchase', 'refund', 'compensation'].includes(row.ledger_type)) {
+      balance += row.amount;
+      if (row.expires_at && (!earliestExpiry || row.expires_at < earliestExpiry)) {
+        earliestExpiry = row.expires_at;
       }
-      if (entry.amount > 0 && entry.expires_at) {
-        if (!earliestExpiry || entry.expires_at < earliestExpiry) {
-          earliestExpiry = entry.expires_at;
-        }
-      }
+    } else {
+      balance -= row.amount;
     }
   }
 
-  // Fetch active venues
-  const { data: venues } = await supabase
-    .from('venues')
-    .select('id, name, tier, city, address, latitude, longitude, amenities, activity_types, avg_rating, total_ratings, opening_time, closing_time, image_urls')
-    .eq('status', 'active')
-    .limit(10);
-
-  // Fetch today's upcoming bookings
-  const today = new Date().toISOString().split('T')[0];
-  const { data: upcomingBookings } = await supabase
+  // Next upcoming booking
+  const now = new Date();
+  const { data: bookings } = await supabase
     .from('bookings')
     .select(`
-      id, status, created_at,
-      venues!bookings_venue_id_fkey(id, name, tier, address),
-      venue_slots!bookings_slot_id_fkey(slot_date, start_time, end_time)
+      id, status,
+      venues!inner(name, tier),
+      venue_slots!inner(slot_date, start_time, end_time)
     `)
     .eq('user_id', profile.id)
     .eq('status', 'confirmed')
-    .gte('venue_slots.slot_date', today)
-    .order('created_at', { ascending: false })
-    .limit(3);
+    .order('created_at', { ascending: true })
+    .limit(5);
+
+  const upcomingBooking = (bookings ?? []).find((b: any) => {
+    const slot = b.venue_slots;
+    if (!slot) return false;
+    return new Date(`${slot.slot_date}T${slot.start_time}`) >= now;
+  }) ?? null;
+
+  // Active session
+  const { data: activeSession } = await supabase
+    .from('sessions')
+    .select('id, status, entry_scanned_at, venues!inner(name, tier)')
+    .eq('user_id', profile.id)
+    .eq('status', 'open')
+    .maybeSingle();
 
   return (
     <HomeScreen
-      userName={profile.name ?? 'there'}
-      tokenBalance={availableTokens}
-      earliestExpiry={earliestExpiry}
+      user={profile}
       venues={venues ?? []}
-      upcomingBookings={upcomingBookings ?? []}
-      userId={profile.id}
+      tokenBalance={Math.max(0, balance)}
+      tokenExpiry={earliestExpiry}
+      upcomingBooking={upcomingBooking}
+      activeSession={activeSession}
     />
   );
 }

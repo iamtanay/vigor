@@ -1,58 +1,45 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { TIER_BASE_RATES } from '@vigor/lib/tokens/formula';
-import type { Venue } from '@vigor/types';
 import TierBadge from '@/components/TierBadge';
 import TokenChip from '@/components/TokenChip';
 
-const CATEGORIES = ['All', 'Gym', 'CrossFit', 'Yoga', 'Swimming', 'Zumba'];
-
 interface Props {
-  userName: string;
+  user: any;
+  venues: any[];
   tokenBalance: number;
-  earliestExpiry: string | null;
-  venues: Partial<Venue>[];
-  upcomingBookings: any[];
-  userId: string;
-}
-
-function getHour() { return new Date().getHours(); }
-function getGreeting() {
-  const h = getHour();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  tokenExpiry: string | null;
+  upcomingBooking: any | null;
+  activeSession: any | null;
 }
 
 function isPeakHour() {
-  const h = getHour();
-  return (h >= 6 && h <= 9) || (h >= 17 && h <= 21);
+  const h = (new Date().getHours() + 5 + (new Date().getMinutes() >= 30 ? 1 : 0)) % 24;
+  return (h >= 6 && h < 9) || (h >= 17 && h < 21);
 }
 
-export default function HomeScreen({ userName, tokenBalance, earliestExpiry, venues, upcomingBookings }: Props) {
-  const [activeCategory, setActiveCategory] = useState('All');
+function tokenCost(tier: string, peak: boolean) {
+  const base: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
+  const r = base[tier] ?? 6;
+  return peak ? Math.ceil(r * 1.5) : r;
+}
 
-  const filteredVenues = activeCategory === 'All'
-    ? venues
-    : venues.filter(v => v.activity_types?.some(a =>
-        a.toLowerCase().includes(activeCategory.toLowerCase())
-      ));
+export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, upcomingBooking, activeSession }: Props) {
+  const peak = isPeakHour();
 
-  const expiryDays = earliestExpiry
-    ? Math.ceil((new Date(earliestExpiry).getTime() - Date.now()) / 86400000)
+  const daysUntilExpiry = tokenExpiry
+    ? Math.ceil((new Date(tokenExpiry).getTime() - Date.now()) / (86400 * 1000))
     : null;
 
   return (
-    <div className="page-slide-in" style={{ minHeight: '100dvh', paddingBottom: 8 }}>
-      {/* Header */}
-      <div style={{ padding: '20px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div style={{ minHeight: '100dvh', paddingBottom: 16 }}>
+      {/* Greeting + token chip */}
+      <div style={{ padding: '20px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
         <div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 3 }}>
-            {getGreeting()}
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
+            {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}
           </div>
-          <div style={{ fontSize: 26, fontWeight: 500, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+          <div style={{ fontSize: 24, fontWeight: 500, color: '#fff', letterSpacing: '-0.02em' }}>
             Find your workout
           </div>
         </div>
@@ -60,220 +47,170 @@ export default function HomeScreen({ userName, tokenBalance, earliestExpiry, ven
       </div>
 
       {/* Expiry warning */}
-      {expiryDays !== null && expiryDays <= 7 && (
-        <div style={{
-          margin: '14px 20px 0',
-          background: 'rgba(255,209,102,0.12)',
-          border: '1px solid rgba(255,209,102,0.25)',
-          borderRadius: 10,
-          padding: '10px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <span style={{ fontSize: 16 }}>⏳</span>
-          <span style={{ fontSize: 12, color: '#FFD166' }}>
-            Tokens expire in {expiryDays} day{expiryDays !== 1 ? 's' : ''} — top up soon
-          </span>
+      {daysUntilExpiry !== null && daysUntilExpiry <= 7 && (
+        <div style={{ padding: '10px 20px 0' }}>
+          <div style={{
+            background: 'rgba(255,209,102,0.1)', border: '1px solid rgba(255,209,102,0.25)',
+            borderRadius: 10, padding: '8px 12px',
+            fontSize: 12, color: '#FFD166',
+          }}>
+            ⚠️ Tokens expire in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''} — <Link href="/app/wallet" style={{ color: '#FFD166', fontWeight: 500 }}>top up</Link>
+          </div>
         </div>
       )}
 
-      {/* Upcoming booking */}
-      {upcomingBookings.length > 0 && (
-        <div style={{ padding: '16px 20px 0' }}>
-          <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>
-            Upcoming
-          </div>
-          {upcomingBookings.slice(0, 1).map((b: any) => (
-            <div key={b.id} className="card-enter" style={{
-              background: 'var(--color-card-dark)',
-              borderRadius: 12,
-              padding: '12px 14px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+      {/* Active session banner */}
+      {activeSession && (
+        <div style={{ padding: '12px 20px 0' }}>
+          <Link href="/app/session" style={{ textDecoration: 'none', display: 'block' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(57,217,138,0.12), rgba(108,99,255,0.08))',
+              border: '1px solid rgba(57,217,138,0.3)',
+              borderRadius: 14, padding: '12px 14px',
+              display: 'flex', alignItems: 'center', gap: 10,
             }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: '#fff' }}>
-                  {b.venues?.name ?? 'Venue'}
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#39D98A', boxShadow: '0 0 8px #39D98A', flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#39D98A' }}>
+                  Active session — {activeSession.venues?.name}
                 </div>
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>
-                  {b.venue_slots?.slot_date} · {b.venue_slots?.start_time?.slice(0, 5)}
-                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Tap to show Exit QR</div>
               </div>
-              <Link href={`/app/booking/${b.id}`} style={{
-                fontSize: 12, color: '#6C63FF', fontWeight: 500, textDecoration: 'none',
-                background: 'rgba(108,99,255,0.12)', padding: '5px 12px', borderRadius: 20,
-              }}>
-                View →
-              </Link>
+              <div style={{ fontSize: 18, color: 'rgba(255,255,255,0.3)' }}>›</div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Venue list */}
-      <div style={{ padding: '20px 20px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'rgba(255,255,255,0.35)' }}>
-            Nearby Venues
-          </div>
-          <Link href="/app/explore" style={{ fontSize: 12, color: '#6C63FF', textDecoration: 'none' }}>
-            See all
           </Link>
         </div>
+      )}
 
+      {/* Upcoming booking preview */}
+      {upcomingBooking && !activeSession && (
+        <div style={{ padding: '12px 20px 0' }}>
+          <Link href={`/app/booking/${upcomingBooking.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+            <div style={{
+              background: 'rgba(108,99,255,0.08)', border: '1px solid rgba(108,99,255,0.2)',
+              borderRadius: 14, padding: '12px 14px',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <span style={{ fontSize: 20 }}>📅</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>
+                  {upcomingBooking.venues?.name}
+                </div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
+                  {upcomingBooking.venue_slots?.slot_date} · {upcomingBooking.venue_slots?.start_time?.slice(0,5)}
+                </div>
+              </div>
+              <span style={{ fontSize: 12, color: '#6C63FF', fontWeight: 500 }}>View ›</span>
+            </div>
+          </Link>
+        </div>
+      )}
+
+      {/* Peak/off-peak indicator */}
+      <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: peak ? '#FF6B6B' : '#39D98A',
+          boxShadow: `0 0 6px ${peak ? '#FF6B6B' : '#39D98A'}`,
+        }} />
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+          {peak ? 'Peak hours — 1.5× rate' : 'Off-peak — standard rate'}
+        </span>
+      </div>
+
+      {/* Venue cards */}
+      <div style={{ padding: '16px 20px 0' }}>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>Nearby venues</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {filteredVenues.slice(0, 4).map((venue, i) => (
-            <VenueCard key={venue.id} venue={venue} animDelay={i * 50} />
-          ))}
+          {venues.map((v: any, i: number) => {
+            const cost = tokenCost(v.tier, peak);
+            return (
+              <Link key={v.id} href={`/app/venue/${v.id}`} style={{ textDecoration: 'none' }}>
+                <div className="card-enter" style={{
+                  background: 'var(--color-card-dark)',
+                  borderRadius: 14, padding: '14px 16px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 500, color: '#fff', marginBottom: 3 }}>{v.name}</div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                        {v.city} · {v.opening_time?.slice(0,5)}–{v.closing_time?.slice(0,5)}
+                      </div>
+                    </div>
+                    <TierBadge tier={v.tier} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: peak ? '#FF6B6B' : '#39D98A' }}>
+                        {cost} tokens
+                      </span>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginLeft: 6 }}>
+                        {peak ? 'peak rate' : 'off-peak rate'}
+                      </span>
+                    </div>
+                    <div style={{
+                      background: '#6C63FF', color: '#fff', fontSize: 12,
+                      padding: '5px 14px', borderRadius: 20, fontWeight: 500,
+                    }}>
+                      Book
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       {/* Browse by category */}
       <div style={{ padding: '24px 20px 0' }}>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>
-          Browse by category
-        </div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              style={{
-                flexShrink: 0,
-                padding: '8px 16px',
-                borderRadius: 20,
-                border: `1px solid ${activeCategory === cat ? '#6C63FF' : 'rgba(255,255,255,0.12)'}`,
-                background: activeCategory === cat ? 'rgba(108,99,255,0.15)' : 'transparent',
-                color: activeCategory === cat ? '#6C63FF' : 'rgba(255,255,255,0.55)',
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              {cat}
-            </button>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>Browse by category</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {['Gym', 'CrossFit', 'Yoga', 'Swimming', 'Zumba'].map(cat => (
+            <Link key={cat} href={`/app/explore?category=${cat.toLowerCase()}`} style={{ textDecoration: 'none' }}>
+              <div style={{
+                background: 'var(--color-card-dark)',
+                borderRadius: 20, padding: '7px 14px',
+                fontSize: 13, color: 'rgba(255,255,255,0.7)',
+                border: '0.5px solid rgba(255,255,255,0.08)',
+              }}>
+                {cat}
+              </div>
+            </Link>
           ))}
         </div>
       </div>
 
-      {/* How it works (for new users) */}
+      {/* How it works */}
       <div style={{ padding: '24px 20px 0' }}>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 10 }}>
-          How it works
-        </div>
-        {[
-          { n: 1, t: 'Get your QR code' },
-          { n: 2, t: 'Check in, work out' },
-          { n: 3, t: 'Scan out, you\'re done' },
-        ].map(item => (
-          <div key={item.n} style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '12px 14px',
-            marginBottom: 6,
-            background: 'var(--color-card-dark)',
-            borderRadius: 10,
-            justifyContent: 'space-between',
-          }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>{item.n}.</span>
-              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)' }}>{item.t}</span>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>How it works</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {[
+            { n: '1', text: 'Book a slot at any venue', sub: 'No tokens deducted yet' },
+            { n: '2', text: 'Show Entry QR at the door', sub: 'Staff scans, session starts' },
+            { n: '3', text: 'Work out' , sub: 'Tokens deducted only at exit' },
+            { n: '4', text: 'Show Exit QR when leaving', sub: 'Session closes, tokens deducted' },
+          ].map(item => (
+            <div key={item.n} style={{
+              display: 'flex', gap: 12, alignItems: 'flex-start',
+              padding: '10px 12px', background: 'var(--color-card-dark)', borderRadius: 10,
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: 'rgba(108,99,255,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 600, color: '#6C63FF', flexShrink: 0,
+              }}>
+                {item.n}
+              </div>
+              <div>
+                <div style={{ fontSize: 13, color: '#fff', fontWeight: 500 }}>{item.text}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{item.sub}</div>
+              </div>
             </div>
-            <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 14 }}>›</span>
-          </div>
-        ))}
-      </div>
-
-      {/* CTA */}
-      <div style={{ padding: '20px 20px 0' }}>
-        <Link
-          href="/app/explore"
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '15px',
-            background: '#6C63FF',
-            borderRadius: 14,
-            color: '#fff',
-            fontSize: 15,
-            fontWeight: 600,
-            textAlign: 'center',
-            textDecoration: 'none',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Continue
-        </Link>
+          ))}
+        </div>
       </div>
     </div>
-  );
-}
-
-function VenueCard({ venue, animDelay }: { venue: Partial<Venue>; animDelay: number }) {
-  const isPeak = isPeakHour();
-  const baseCost = venue.tier ? TIER_BASE_RATES[venue.tier] : 8;
-  const tokenCost = isPeak ? Math.ceil(baseCost * 1.5) : baseCost;
-
-  return (
-    <Link
-      href={`/app/venue/${venue.id}`}
-      style={{ textDecoration: 'none' }}
-      className="card-enter"
-    >
-      <div style={{
-        background: 'var(--color-card-dark)',
-        borderRadius: 14,
-        padding: '14px 16px',
-        border: '0.5px solid rgba(255,255,255,0.06)',
-        animationDelay: `${animDelay}ms`,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 500, color: '#fff' }}>{venue.name}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-              {venue.city} · {venue.opening_time?.slice(0,5)}–{venue.closing_time?.slice(0,5)}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {isPeak && (
-              <span style={{
-                fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 10,
-                background: 'rgba(255,107,107,0.15)', color: '#FF6B6B',
-                border: '1px solid rgba(255,107,107,0.25)',
-              }}>Peak</span>
-            )}
-            <TierBadge tier={venue.tier ?? 'bronze'} />
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#39D98A' }}>
-              {tokenCost} tokens
-            </span>
-            {!isPeak && (
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>off-peak</span>
-            )}
-          </div>
-          <span style={{
-            fontSize: 12, fontWeight: 500, padding: '6px 16px', borderRadius: 20,
-            background: '#6C63FF', color: '#fff',
-          }}>
-            Book
-          </span>
-        </div>
-        {venue.activity_types && venue.activity_types.length > 0 && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-            {venue.activity_types.slice(0, 3).map(a => (
-              <span key={a} style={{
-                fontSize: 10, color: 'rgba(255,255,255,0.3)',
-                background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 8,
-              }}>{a}</span>
-            ))}
-          </div>
-        )}
-      </div>
-    </Link>
   );
 }
