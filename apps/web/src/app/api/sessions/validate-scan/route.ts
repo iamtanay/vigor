@@ -95,6 +95,7 @@ export async function POST(req: Request) {
     };
 
     // Check expiry (15 min after slot start)
+    // slot_start_iso is a proper UTC ISO string (generated with +05:30 offset applied)
     const slotStart = new Date(ep.slot_start_iso);
     const expiresAt = new Date(slotStart.getTime() + 15 * 60 * 1000);
     if (new Date() > expiresAt) {
@@ -233,10 +234,11 @@ export async function POST(req: Request) {
     // Calculate token deduction
     const TIER_BASE_RATES: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
     const baseRate = TIER_BASE_RATES[venue.tier] ?? 6;
-    const hour = exitAt.getHours(); // server is UTC — but use IST: UTC+5:30
-    const istHour = (hour + 5) % 24 + (exitAt.getMinutes() >= 30 ? 0 : 0);
-    const istHourActual = (hour + 5 + Math.floor((exitAt.getMinutes() + 30) / 60)) % 24;
-    const isPeak = (istHourActual >= 6 && istHourActual < 9) || (istHourActual >= 17 && istHourActual < 21);
+    // Convert exit time to IST (UTC+5:30) for peak hour check
+    const utcHour = exitAt.getUTCHours();
+    const utcMin = exitAt.getUTCMinutes();
+    const istHour = (utcHour + 5 + (utcMin >= 30 ? 1 : 0)) % 24;
+    const isPeak = (istHour >= 6 && istHour < 9) || (istHour >= 17 && istHour < 21);
     const multiplier = isPeak ? 1.5 : 1.0;
 
     // Check commitment discount
@@ -252,23 +254,23 @@ export async function POST(req: Request) {
     const discount = commitment?.discount_rate ?? 0;
     const tokensToDeduct = Math.ceil(baseRate * multiplier * (1 - discount));
 
-    // Check user has enough tokens
+    // Check user has enough tokens (using same pattern as wallet/route.ts)
     const { data: ledger } = await adminSupabase
       .from('token_ledger')
-      .select('amount, ledger_type')
-      .eq('user_id', ep.user_id)
-      .order('created_at', { ascending: false });
+      .select('amount, expires_at, grace_expires_at')
+      .eq('user_id', ep.user_id);
 
+    const now2 = new Date();
     let balance = 0;
-    if (ledger) {
-      for (const row of ledger) {
-        if (['purchase', 'refund', 'compensation'].includes(row.ledger_type)) {
-          balance += row.amount;
-        } else {
-          balance -= row.amount;
-        }
+    for (const e of ledger ?? []) {
+      if (e.amount <= 0) {
+        balance += e.amount; // debits (negative amount)
+      } else if (!e.expires_at || new Date(e.expires_at) >= now2) {
+        balance += e.amount; // valid credits
       }
+      // expired tokens not counted (grace handled separately)
     }
+    balance = Math.max(0, balance);
 
     if (balance < tokensToDeduct) {
       // Still close the session — deduct what's available, log shortfall
@@ -291,9 +293,10 @@ export async function POST(req: Request) {
     if (actualDeduction > 0) {
       await adminSupabase.from('token_ledger').insert({
         user_id: ep.user_id,
-        ledger_type: 'deduction',
-        amount: actualDeduction,
-        description: `Session at ${venue.name} — ${isPeak ? 'peak' : 'off-peak'} rate`,
+        type: 'deduction',
+        amount: -actualDeduction,          // negative = debit, per schema convention
+        balance_after: Math.max(0, balance - actualDeduction),
+        notes: `Session at ${venue.name} — ${isPeak ? 'peak' : 'off-peak'} rate`,
         session_id: ep.session_id,
         venue_id: ep.venue_id,
       });

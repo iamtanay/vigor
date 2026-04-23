@@ -71,7 +71,11 @@ export async function POST(req: Request) {
   }
 
   const slot = booking.venue_slots as any;
-  const slotStart = new Date(`${slot.slot_date}T${slot.start_time}`);
+  // slot_date is YYYY-MM-DD and start_time is HH:MM:SS in IST (Indian Standard Time)
+  // We must interpret these as IST (UTC+5:30), not local server time (which may be UTC)
+  // Construct as IST: append +05:30 offset
+  const slotDateTimeIST = `${slot.slot_date}T${slot.start_time}+05:30`;
+  const slotStart = new Date(slotDateTimeIST);
   const expiresAt = new Date(slotStart.getTime() + 15 * 60 * 1000); // +15 min
 
   // Check if entry window is still open

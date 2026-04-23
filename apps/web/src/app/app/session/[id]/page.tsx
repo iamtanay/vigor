@@ -33,5 +33,5 @@ export default async function ActiveSessionPage() {
     .limit(1)
     .maybeSingle();
 
-  return <ActiveSessionScreen session={session} userId={profile.id} />;
+  return <ActiveSessionScreen initialSession={session} userId={profile.id} />;
 }

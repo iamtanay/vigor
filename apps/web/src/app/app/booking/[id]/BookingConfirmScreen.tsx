@@ -15,15 +15,11 @@ export default function BookingConfirmScreen({ booking }: Props) {
 
   const slot = booking.venue_slots;
   const venue = booking.venues;
-  const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}`) : null;
+  const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}+05:30`) : null;
   const hoursUntil = slotDt ? (slotDt.getTime() - Date.now()) / 3600000 : 0;
   const canCancelFree = hoursUntil > 2;
 
-  // Show QR button if slot is within 30 min of start (entry window)
-  const slotStarted = slotDt ? slotDt.getTime() <= Date.now() : false;
-  const slotInWindow = slotDt
-    ? slotDt.getTime() <= Date.now() + 30 * 60 * 1000 && slotDt.getTime() >= Date.now() - 15 * 60 * 1000
-    : false;
+  // Show QR button for all upcoming confirmed bookings (API validates the 15-min entry window)
   const isCompleted = booking.status === 'completed';
 
   async function handleCancel() {

@@ -101,7 +101,7 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
               {upcomingBookings.map((b: any, i: number) => {
                 const slot = b.venue_slots;
                 const venue = b.venues;
-                const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}`) : null;
+                const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}+05:30`) : null;
                 const hasEntryQR = !b.entry_qr_used && slotDt &&
                   slotDt.getTime() <= Date.now() + 30 * 60 * 1000 &&
                   slotDt.getTime() >= Date.now() - 15 * 60 * 1000;

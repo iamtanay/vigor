@@ -212,6 +212,29 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
     return () => clearInterval(id);
   }, [entryQRExpiry]);
 
+  // ── Poll /api/sessions/active to detect when gym scans exit QR and session closes
+  const pollForSessionClosure = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch('/api/sessions/active');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.session) {
+        // Session is now closed — fetch summary from the closed session endpoint
+        const summaryRes = await fetch(`/api/sessions/summary?sessionId=${session.id}`);
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json();
+          setSummary(summaryData);
+          setMode('session-summary');
+        } else {
+          // Can't get summary — gracefully go to no-session
+          setSession(null);
+          setMode('no-session');
+        }
+      }
+    } catch { /* ignore poll errors */ }
+  }, [session]);
+
   // ── Exit QR auto-refresh every 60s
   const fetchExitQR = useCallback(async () => {
     if (!session) return;
@@ -225,8 +248,8 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       if (!res.ok) {
         const err = await res.json();
         if (err.error?.includes('already closed') || res.status === 404) {
-          // Session was auto-closed
-          router.refresh();
+          // Session was closed (by gym exit scan or auto-close) — show summary
+          await pollForSessionClosure();
           return;
         }
         return;
@@ -237,7 +260,7 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
     } finally {
       setExitLoading(false);
     }
-  }, [session, router]);
+  }, [session, pollForSessionClosure]);
 
   useEffect(() => {
     if (mode !== 'active-session' || !session) return;
@@ -256,9 +279,15 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       });
     }, 1000);
 
+    // Background poll every 10s to catch exit scan between QR refreshes
+    const pollInterval = setInterval(() => {
+      pollForSessionClosure();
+    }, 10000);
+
     return () => {
       if (exitIntervalRef.current) clearInterval(exitIntervalRef.current);
       if (exitRefreshRef.current) clearTimeout(exitRefreshRef.current);
+      clearInterval(pollInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, session?.id]);
@@ -644,8 +673,10 @@ function EntryQRLauncher({
 function TokenCostPreview({ venueTier }: { venueTier: string }) {
   const RATES: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
   const base = RATES[venueTier] ?? 6;
-  const hour = new Date().getHours();
-  const istHour = (hour + 5 + (new Date().getMinutes() >= 30 ? 1 : 0)) % 24;
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMin = now.getUTCMinutes();
+  const istHour = (utcHour + 5 + (utcMin >= 30 ? 1 : 0)) % 24;
   const isPeak = (istHour >= 6 && istHour < 9) || (istHour >= 17 && istHour < 21);
   const cost = isPeak ? Math.ceil(base * 1.5) : base;
 

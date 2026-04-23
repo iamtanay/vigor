@@ -59,7 +59,7 @@ export default async function HomePage() {
   const upcomingBooking = (bookings ?? []).find((b: any) => {
     const slot = b.venue_slots;
     if (!slot) return false;
-    return new Date(`${slot.slot_date}T${slot.start_time}`) >= now;
+    return new Date(`${slot.slot_date}T${slot.start_time}+05:30`) >= now;
   }) ?? null;
 
   // Active session

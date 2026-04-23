@@ -49,7 +49,7 @@ export default async function ActivityPage() {
   const upcoming = (upcomingBookings ?? []).filter((b: any) => {
     const slot = b.venue_slots;
     if (!slot) return false;
-    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}`);
+    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}+05:30`);
     return slotDt >= new Date(now.getTime() - 15 * 60 * 1000);
   });
 

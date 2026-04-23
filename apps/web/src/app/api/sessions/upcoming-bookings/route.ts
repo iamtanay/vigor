@@ -32,12 +32,16 @@ export async function GET() {
     .eq('entry_qr_used', false)
     .order('created_at', { ascending: true });
 
-  // Filter to upcoming slots in application layer
+  // Filter to upcoming slots in application layer and sort by slot start
   const upcoming = (bookings ?? []).filter((b: any) => {
     const slot = b.venue_slots;
     if (!slot) return false;
-    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}`);
+    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}+05:30`);
     return slotDt >= windowStart && slotDt <= windowEnd;
+  }).sort((a: any, b: any) => {
+    const aSlot = new Date(`${a.venue_slots.slot_date}T${a.venue_slots.start_time}+05:30`);
+    const bSlot = new Date(`${b.venue_slots.slot_date}T${b.venue_slots.start_time}+05:30`);
+    return aSlot.getTime() - bSlot.getTime();
   });
 
   return NextResponse.json({ bookings: upcoming });

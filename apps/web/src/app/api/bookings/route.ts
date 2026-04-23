@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   if (slot.booked_count >= slot.capacity) return NextResponse.json({ error: 'Slot is full' }, { status: 409 });
 
   // Only reject slots that have already passed — no upper advance limit
-  const slotDt = new Date(`${slot.slot_date}T${slot.start_time}`);
+  const slotDt = new Date(`${slot.slot_date}T${slot.start_time}+05:30`);
   if (slotDt.getTime() < Date.now() - 15 * 60 * 1000) {
     return NextResponse.json({ error: 'This slot has already passed' }, { status: 409 });
   }

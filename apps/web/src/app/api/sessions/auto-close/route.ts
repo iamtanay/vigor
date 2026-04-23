@@ -81,9 +81,10 @@ async function runAutoClose() {
       // Deduct tokens
       await adminSupabase.from('token_ledger').insert({
         user_id: session.user_id,
-        ledger_type: 'deduction',
-        amount: tokensToDeduct,
-        description: `Auto-close at ${venue.name} — session exceeded 4 hours`,
+        type: 'deduction',
+        amount: -tokensToDeduct,           // negative = debit
+        balance_after: 0,                  // conservative — actual balance not known here
+        notes: `Auto-close at ${venue.name} — session exceeded 4 hours`,
         session_id: session.id,
         venue_id: session.venue_id,
       });
