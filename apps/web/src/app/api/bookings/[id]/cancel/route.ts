@@ -30,7 +30,7 @@ export async function POST(
   }
 
   const slot = booking.venue_slots as any;
-  const slotDt = new Date(`${slot?.slot_date}T${slot?.start_time}`);
+  const slotDt = new Date(`${slot?.slot_date}T${slot?.start_time}+05:30`);
   const hoursUntil = (slotDt.getTime() - Date.now()) / 3600000;
   const isLateCancellation = hoursUntil < 2 && hoursUntil >= 0;
 
@@ -60,16 +60,21 @@ export async function POST(
     const { data: ledger } = await supabase
       .from('token_ledger').select('amount, expires_at').eq('user_id', profile.id);
     const now = new Date();
-    const balance = (ledger ?? []).reduce((sum: number, e: any) => {
-      if (!e.expires_at || new Date(e.expires_at) > now) return sum + e.amount;
-      return sum;
-    }, 0);
+    let balance = 0;
+    for (const e of ledger ?? []) {
+      if (e.amount <= 0) {
+        balance += e.amount;
+      } else if (!e.expires_at || new Date(e.expires_at) >= now) {
+        balance += e.amount;
+      }
+    }
+    balance = Math.max(0, balance);
     await supabase.from('token_ledger').insert({
       user_id: profile.id,
       booking_id: id,
       type: 'penalty',
-      amount: -1,
-      balance_after: Math.max(balance - 1, 0),
+      amount: -1,                          // negative = debit
+      balance_after: Math.max(0, balance - 1),
       notes: 'Late cancellation penalty (< 2 hrs before slot)',
     });
   }

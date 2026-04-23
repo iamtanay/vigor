@@ -25,6 +25,16 @@ const NAV = [
     ),
   },
   {
+    href: '/app/session',
+    label: 'Session',
+    icon: (active: boolean) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="3" stroke={active ? '#6C63FF' : '#555'} strokeWidth="2"/>
+        <path d="M9 9H9.01M9 15H9.01M15 9H15.01M15 15H15.01M7 12H17" stroke={active ? '#6C63FF' : '#555'} strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     href: '/app/wallet',
     label: 'Wallet',
     icon: (active: boolean) => (
@@ -73,9 +83,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
           {NAV.map(({ href, label, icon }) => {
-            const active = pathname.startsWith(href);
+            const active = pathname === href || pathname.startsWith(href + '/');
             return (
-              <Link key={href} href={href} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textDecoration: 'none', minWidth: 64 }}>
+              <Link key={href} href={href} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, textDecoration: 'none', minWidth: 56 }}>
                 {icon(active)}
                 <span style={{ fontSize: 10, fontWeight: 500, color: active ? '#6C63FF' : '#555', letterSpacing: '0.02em' }}>
                   {label}

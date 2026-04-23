@@ -14,11 +14,7 @@ export default async function WalletPage() {
     .single();
   if (!profile) redirect('/login');
 
-  // NOTE: Do NOT join venues via session_id here.
-  // token_ledger has a session_id column but the FK to sessions was never added
-  // in the migrations (it says "FK added after sessions table" — never executed).
-  // The join `venues!token_ledger_session_id_fkey` silently errored, returning
-  // null for the entire ledger query → 0 balance displayed.
+  // Fetch ledger without joining venues (venue_id FK on token_ledger may not exist)
   const { data: ledger, error: ledgerError } = await supabase
     .from('token_ledger')
     .select(`
@@ -40,13 +36,10 @@ export default async function WalletPage() {
 
   for (const e of ledger ?? []) {
     if (e.amount > 0) {
-      // Credit entry — check if expired
       if (e.expires_at && new Date(e.expires_at) < now) {
-        // Expired — check grace period
         if (e.grace_expires_at && new Date(e.grace_expires_at) > now) {
           graceTokens += Math.floor(e.amount * 0.5);
         }
-        // else fully lapsed — skip
       } else {
         availableTokens += e.amount;
         if (e.expires_at && (!earliestExpiry || e.expires_at < earliestExpiry)) {
@@ -54,8 +47,30 @@ export default async function WalletPage() {
         }
       }
     } else {
-      // Debit — amount is negative, just add it
-      availableTokens += e.amount;
+      availableTokens += e.amount; // negative debit
+    }
+  }
+
+  // Fetch confirmed bookings to compute blocked tokens
+  const { data: activeBookings } = await supabase
+    .from('bookings')
+    .select(`
+      id, venue_id,
+      venues!inner(tier),
+      venue_slots!inner(slot_date, start_time)
+    `)
+    .eq('user_id', profile.id)
+    .eq('status', 'confirmed');
+
+  const TIER_BASE_RATES: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
+  let blockedTokens = 0;
+  for (const b of activeBookings ?? []) {
+    const slot = (b as any).venue_slots;
+    const venue = (b as any).venues;
+    if (!slot || !venue) continue;
+    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}+05:30`);
+    if (slotDt > new Date(now.getTime() - 15 * 60 * 1000)) {
+      blockedTokens += TIER_BASE_RATES[venue.tier] ?? 6;
     }
   }
 
@@ -72,6 +87,7 @@ export default async function WalletPage() {
       earliestExpiry={earliestExpiry}
       ledger={ledger ?? []}
       bundles={bundles ?? []}
+      blockedTokens={blockedTokens}
     />
   );
 }

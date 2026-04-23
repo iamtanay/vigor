@@ -9,58 +9,83 @@ export default async function ActivityPage() {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('id, name')
+    .select('id')
     .eq('auth_id', user.id)
     .single();
+
   if (!profile) redirect('/login');
 
-  // Fetch sessions with venue and booking info
+  // Fetch sessions history (closed + auto_closed)
   const { data: sessions } = await supabase
     .from('sessions')
     .select(`
-      id, status, entry_scanned_at, exit_scanned_at, auto_closed_at, tokens_deducted, created_at,
-      venues!sessions_venue_id_fkey(id, name, tier, city),
-      bookings!sessions_booking_id_fkey(
-        id, status,
-        venue_slots!bookings_slot_id_fkey(slot_date, start_time, end_time)
+      id, status, entry_scanned_at, exit_scanned_at, auto_closed_at, tokens_deducted,
+      venues!inner(name, tier),
+      bookings!inner(
+        id,
+        venue_slots!inner(slot_date, start_time, end_time)
       )
     `)
     .eq('user_id', profile.id)
-    .order('created_at', { ascending: false })
-    .limit(30);
+    .in('status', ['closed', 'auto_closed'])
+    .order('entry_scanned_at', { ascending: false })
+    .limit(20);
 
-  // Fetch upcoming confirmed bookings (no session yet)
-  const today = new Date().toISOString().split('T')[0];
-  const { data: upcoming } = await supabase
+  // All confirmed upcoming bookings (not just entry-window ones)
+  const { data: upcomingBookings } = await supabase
     .from('bookings')
     .select(`
-      id, status, created_at,
-      venues!bookings_venue_id_fkey(id, name, tier, city),
-      venue_slots!bookings_slot_id_fkey(slot_date, start_time, end_time)
+      id, status, entry_qr_used,
+      venues!inner(name, tier),
+      venue_slots!inner(slot_date, start_time, end_time)
     `)
     .eq('user_id', profile.id)
     .eq('status', 'confirmed')
-    .gte('venue_slots.slot_date', today)
-    .order('created_at', { ascending: false })
-    .limit(10);
+    .order('created_at', { ascending: true })
+    .limit(20);
 
-  // Token balance for header
+  // Filter to future-ish slots (not passed more than 15 min ago)
+  const now = new Date();
+  const upcoming = (upcomingBookings ?? []).filter((b: any) => {
+    const slot = b.venue_slots;
+    if (!slot) return false;
+    const slotDt = new Date(`${slot.slot_date}T${slot.start_time}+05:30`);
+    return slotDt >= new Date(now.getTime() - 15 * 60 * 1000);
+  });
+
+  // Active session check
+  const { data: activeSession } = await supabase
+    .from('sessions')
+    .select(`id, status, entry_scanned_at, venues!inner(name, tier)`)
+    .eq('user_id', profile.id)
+    .eq('status', 'open')
+    .maybeSingle();
+
+  // Token balance — correct calculation using 'type' column
   const { data: ledger } = await supabase
     .from('token_ledger')
-    .select('amount, expires_at')
+    .select('amount, type, expires_at')
     .eq('user_id', profile.id);
 
-  const now = new Date();
-  const tokenBalance = (ledger ?? []).reduce((sum: number, e: any) => {
-    if (!e.expires_at || new Date(e.expires_at) > now) return sum + e.amount;
-    return sum;
-  }, 0);
+  let balance = 0;
+  const nowTs = new Date();
+  for (const row of ledger ?? []) {
+    if (row.amount > 0) {
+      // Only count non-expired credits
+      if (!row.expires_at || new Date(row.expires_at) >= nowTs) {
+        balance += row.amount;
+      }
+    } else {
+      balance += row.amount; // negative debit
+    }
+  }
 
   return (
     <ActivityScreen
       sessions={sessions ?? []}
-      upcomingBookings={upcoming ?? []}
-      tokenBalance={Math.max(tokenBalance, 0)}
+      upcomingBookings={upcoming}
+      tokenBalance={Math.max(0, balance)}
+      activeSession={activeSession}
     />
   );
 }
