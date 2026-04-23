@@ -22,28 +22,33 @@ export default async function HomePage() {
     .order('avg_rating', { ascending: false })
     .limit(4);
 
-  // Token balance + earliest expiry
+  // Token balance — correct: use 'type' column (not 'ledger_type')
   const { data: ledger } = await supabase
     .from('token_ledger')
-    .select('amount, ledger_type, expires_at')
+    .select('amount, type, expires_at')
     .eq('user_id', profile.id)
     .order('created_at', { ascending: false });
 
+  const now = new Date();
   let balance = 0;
   let earliestExpiry: string | null = null;
+
   for (const row of ledger ?? []) {
-    if (['purchase', 'refund', 'compensation'].includes(row.ledger_type)) {
-      balance += row.amount;
-      if (row.expires_at && (!earliestExpiry || row.expires_at < earliestExpiry)) {
-        earliestExpiry = row.expires_at;
+    if (row.amount > 0) {
+      // Credit — check expiry
+      if (!row.expires_at || new Date(row.expires_at) >= now) {
+        balance += row.amount;
+        if (row.expires_at && (!earliestExpiry || row.expires_at < earliestExpiry)) {
+          earliestExpiry = row.expires_at;
+        }
       }
+      // expired credits not counted (grace handled separately in wallet)
     } else {
-      balance -= row.amount;
+      balance += row.amount; // negative debit
     }
   }
 
   // Next upcoming booking
-  const now = new Date();
   const { data: bookings } = await supabase
     .from('bookings')
     .select(`
@@ -54,7 +59,7 @@ export default async function HomePage() {
     .eq('user_id', profile.id)
     .eq('status', 'confirmed')
     .order('created_at', { ascending: true })
-    .limit(5);
+    .limit(10);
 
   const upcomingBooking = (bookings ?? []).find((b: any) => {
     const slot = b.venue_slots;

@@ -4,14 +4,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 /**
  * POST /api/sessions/auto-close
  *
- * Closes any open sessions that have been open for > 4 hours without an exit scan.
- * Deducts standard (non-peak, no discount) token rate.
+ * Closes open sessions that have been open for more than 4 hours.
+ * Deducts the standard (non-peak, no discount) base rate for the venue tier.
  *
- * FREE TIER REPLACEMENT for pg_cron:
- * - Called automatically when user opens the Active Session screen
- * - Called automatically when gym owner opens the scan portal
- * - Can also be triggered via a Vercel cron job (free on hobby plan)
- *   by adding vercel.json: { "crons": [{ "path": "/api/sessions/auto-close", "schedule": "*/15 * * * *" }] }
+ * Called by:
+ *  1. Vercel cron job (vercel.json) — runs every 15 min in production
+ *  2. GET variant below — also for the Vercel cron (cron jobs send GET)
+ *
+ * NOT called from client-side fetches or other API routes — doing so
+ * without proper auth cookies causes internal request failures that
+ * corrupt the Supabase SSR cookie state.
  *
  * This is idempotent — safe to call multiple times.
  */
@@ -19,9 +21,8 @@ export async function POST() {
   return runAutoClose();
 }
 
-// Also allow GET for Vercel cron (cron jobs use GET by default)
+// Vercel cron sends GET requests
 export async function GET(req: Request) {
-  // Only allow from Vercel cron (has Authorization header) or in dev
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
@@ -32,12 +33,11 @@ export async function GET(req: Request) {
   return runAutoClose();
 }
 
-async function runAutoClose() {
+export async function runAutoClose() {
   const adminSupabase = createAdminClient();
 
   const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000); // 4 hours ago
 
-  // Find open sessions older than 4 hours
   const { data: staleSessions, error } = await adminSupabase
     .from('sessions')
     .select(`
@@ -63,11 +63,9 @@ async function runAutoClose() {
   for (const session of staleSessions) {
     const venue = session.venues as any;
     const baseRate = TIER_BASE_RATES[venue.tier] ?? 6;
-    // Auto-close uses standard (non-peak, no discount) rate
     const tokensToDeduct = baseRate;
 
     try {
-      // Update session to auto_closed
       await adminSupabase
         .from('sessions')
         .update({
@@ -78,24 +76,21 @@ async function runAutoClose() {
         })
         .eq('id', session.id);
 
-      // Deduct tokens
       await adminSupabase.from('token_ledger').insert({
         user_id: session.user_id,
         type: 'deduction',
-        amount: -tokensToDeduct,           // negative = debit
-        balance_after: 0,                  // conservative — actual balance not known here
+        amount: -tokensToDeduct,
+        balance_after: 0,
         notes: `Auto-close at ${venue.name} — session exceeded 4 hours`,
         session_id: session.id,
         venue_id: session.venue_id,
       });
 
-      // Mark booking completed
       await adminSupabase
         .from('bookings')
         .update({ status: 'completed' })
         .eq('id', session.booking_id);
 
-      // Write audit log
       await adminSupabase.from('audit_log').insert({
         event_type: 'auto_close',
         user_id: session.user_id,

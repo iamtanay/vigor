@@ -4,7 +4,19 @@ import { NextResponse } from 'next/server';
 /**
  * GET /api/sessions/active
  * Returns the user's current open session (if any).
- * Also triggers auto-close check in the background.
+ *
+ * NOTE: Auto-close is intentionally NOT triggered here.
+ * Triggering a server-to-server fetch() from inside a Route Handler
+ * that is itself called from a client component causes the internal
+ * request to run without auth cookies, which can fail silently and
+ * corrupt the response stream — breaking cookie state for subsequent
+ * server-component renders (wallet shows 0, tokens reset, etc).
+ *
+ * Auto-close is instead triggered by:
+ *  1. The Vercel cron job (vercel.json) every 15 min in production
+ *  2. Manually: POST /api/sessions/auto-close from the gym scan portal
+ *  3. The lazy trigger in /api/sessions/generate-exit-qr (safe because
+ *     that route already holds the auth context)
  */
 export async function GET() {
   const supabase = await createClient();
@@ -15,20 +27,17 @@ export async function GET() {
     .from('users').select('id').eq('auth_id', user.id).single();
   if (!profile) return NextResponse.json({ session: null });
 
-  // Trigger auto-close in background (fire and forget — don't await)
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  fetch(`${baseUrl}/api/sessions/auto-close`, { method: 'POST' }).catch(() => {});
-
-  // Fetch open session
-  const { data: session } = await supabase
+  // Left join on bookings (no !inner) so a missing booking never silently
+  // returns null for the whole row or triggers an unexpected RLS error
+  const { data: session, error } = await supabase
     .from('sessions')
     .select(`
       id, status, entry_scanned_at, tokens_deducted,
       venue_id,
       venues!inner(name, tier, address),
-      bookings!inner(
+      bookings(
         id, slot_id,
-        venue_slots!inner(slot_date, start_time, end_time)
+        venue_slots(slot_date, start_time, end_time)
       )
     `)
     .eq('user_id', profile.id)
@@ -37,18 +46,23 @@ export async function GET() {
     .limit(1)
     .maybeSingle();
 
+  if (error) {
+    console.error('active session fetch error:', error.message);
+    return NextResponse.json({ session: null });
+  }
+
   if (!session) {
     return NextResponse.json({ session: null });
   }
 
   const venue = session.venues as any;
-  const booking = session.bookings as any;
+  const bookingArr = session.bookings as any;
+  const booking = Array.isArray(bookingArr) ? bookingArr[0] : bookingArr;
   const slot = booking?.venue_slots;
 
-  // Check if auto-close threshold exceeded (client can show warning)
   const entryAt = session.entry_scanned_at ? new Date(session.entry_scanned_at) : new Date();
   const durationMins = Math.round((Date.now() - entryAt.getTime()) / 60000);
-  const autoCloseWarning = durationMins > 210; // warn at 3.5 hrs
+  const autoCloseWarning = durationMins > 210;
 
   return NextResponse.json({
     session: {
@@ -60,10 +74,10 @@ export async function GET() {
       entryScannedAt: session.entry_scanned_at,
       durationMins,
       autoCloseWarning,
-      bookingId: booking?.id,
-      slotDate: slot?.slot_date,
-      slotStart: slot?.start_time,
-      slotEnd: slot?.end_time,
+      bookingId: booking?.id ?? null,
+      slotDate: slot?.slot_date ?? null,
+      slotStart: slot?.start_time ?? null,
+      slotEnd: slot?.end_time ?? null,
     },
   });
 }

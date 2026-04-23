@@ -15,7 +15,7 @@ export default async function ActivityPage() {
 
   if (!profile) redirect('/login');
 
-  // Fetch sessions (history)
+  // Fetch sessions history (closed + auto_closed)
   const { data: sessions } = await supabase
     .from('sessions')
     .select(`
@@ -31,7 +31,7 @@ export default async function ActivityPage() {
     .order('entry_scanned_at', { ascending: false })
     .limit(20);
 
-  // Upcoming bookings
+  // All confirmed upcoming bookings (not just entry-window ones)
   const { data: upcomingBookings } = await supabase
     .from('bookings')
     .select(`
@@ -42,9 +42,9 @@ export default async function ActivityPage() {
     .eq('user_id', profile.id)
     .eq('status', 'confirmed')
     .order('created_at', { ascending: true })
-    .limit(10);
+    .limit(20);
 
-  // Filter to future slots
+  // Filter to future-ish slots (not passed more than 15 min ago)
   const now = new Date();
   const upcoming = (upcomingBookings ?? []).filter((b: any) => {
     const slot = b.venue_slots;
@@ -53,7 +53,7 @@ export default async function ActivityPage() {
     return slotDt >= new Date(now.getTime() - 15 * 60 * 1000);
   });
 
-  // Active session
+  // Active session check
   const { data: activeSession } = await supabase
     .from('sessions')
     .select(`id, status, entry_scanned_at, venues!inner(name, tier)`)
@@ -61,16 +61,23 @@ export default async function ActivityPage() {
     .eq('status', 'open')
     .maybeSingle();
 
-  // Token balance
+  // Token balance — correct calculation using 'type' column
   const { data: ledger } = await supabase
     .from('token_ledger')
-    .select('amount, ledger_type')
+    .select('amount, type, expires_at')
     .eq('user_id', profile.id);
 
   let balance = 0;
+  const nowTs = new Date();
   for (const row of ledger ?? []) {
-    if (['purchase', 'refund', 'compensation'].includes(row.ledger_type)) balance += row.amount;
-    else balance -= row.amount;
+    if (row.amount > 0) {
+      // Only count non-expired credits
+      if (!row.expires_at || new Date(row.expires_at) >= nowTs) {
+        balance += row.amount;
+      }
+    } else {
+      balance += row.amount; // negative debit
+    }
   }
 
   return (

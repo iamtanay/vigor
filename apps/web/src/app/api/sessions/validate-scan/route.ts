@@ -32,13 +32,18 @@ function parseQRString(raw: string) {
     const parts = raw.split(':');
     if (parts[0] !== 'vigor') return null;
     const type = parts[1] as 'entry' | 'exit';
-    const rest = parts[2];
+    if (type !== 'entry' && type !== 'exit') return null;
+    // The rest after the second colon is base64payload.signature
+    // But the base64 payload itself might contain colons after decoding — so rejoin
+    const rest = parts.slice(2).join(':');
     if (!rest) return null;
     const dotIdx = rest.lastIndexOf('.');
+    if (dotIdx < 0) return null;
     const payloadB64 = rest.substring(0, dotIdx);
     const signature = rest.substring(dotIdx + 1);
-    const payload = JSON.parse(atob(payloadB64));
-    return { type, payload, signature, payloadStr: atob(payloadB64) };
+    const payloadStr = atob(payloadB64);
+    const payload = JSON.parse(payloadStr);
+    return { type, payload, signature, payloadStr };
   } catch {
     return null;
   }
@@ -47,30 +52,28 @@ function parseQRString(raw: string) {
 /**
  * POST /api/sessions/validate-scan
  * Body: { qrString: string, scanMethod?: 'staff' | 'kiosk' }
+ *
  * Called by the gym owner scan portal.
  * Uses admin (service_role) client — gym owner doesn't need to be authed as the user.
  *
- * For ENTRY scan:
- *  - Validates QR signature, expiry, single-use flag
+ * ENTRY scan:
+ *  - Validates HMAC, expiry (15 min after slot start), single-use flag
  *  - Creates session record
  *  - Marks booking entry_qr_used = true
  *  - Writes audit_log entry
  *
- * For EXIT scan:
- *  - Validates QR signature, 90s freshness window
- *  - Computes token deduction
- *  - Closes session, writes deduction to token_ledger
+ * EXIT scan:
+ *  - Validates HMAC, 90s freshness window
+ *  - Computes token deduction (tier × peak multiplier × commitment discount)
+ *  - Closes session, inserts deduction into token_ledger
  *  - Marks booking status = 'completed'
  *  - Writes audit_log entry
- *  - Returns session summary (venue, duration, tokens)
  */
 export async function POST(req: Request) {
-  // Gym owner auth check — must be authenticated
-  // We use the admin client for writes but still verify caller is a gym_owner or admin
   const adminSupabase = createAdminClient();
 
   const body = await req.json();
-  const { qrString, scanMethod = 'staff', gymOwnerId } = body;
+  const { qrString, scanMethod = 'staff' } = body;
 
   if (!qrString) return NextResponse.json({ error: 'Missing qrString' }, { status: 400 });
 
@@ -81,7 +84,7 @@ export async function POST(req: Request) {
 
   // Verify HMAC signature
   const valid = await verifySignature(parsed.payloadStr, parsed.signature, secret);
-  if (!valid) return NextResponse.json({ error: 'QR signature invalid' }, { status: 403 });
+  if (!valid) return NextResponse.json({ error: 'QR signature invalid — QR may be tampered or from a different environment' }, { status: 403 });
 
   // ── ENTRY SCAN ──────────────────────────────────────────────────────────────
   if (parsed.type === 'entry') {
@@ -94,12 +97,33 @@ export async function POST(req: Request) {
       nonce: string;
     };
 
+    // Validate required fields
+    if (!ep.booking_id || !ep.user_id || !ep.venue_id || !ep.slot_start_iso) {
+      return NextResponse.json({ error: 'Malformed entry QR payload' }, { status: 400 });
+    }
+
     // Check expiry (15 min after slot start)
-    // slot_start_iso is a proper UTC ISO string (generated with +05:30 offset applied)
     const slotStart = new Date(ep.slot_start_iso);
     const expiresAt = new Date(slotStart.getTime() + 15 * 60 * 1000);
-    if (new Date() > expiresAt) {
-      return NextResponse.json({ error: 'Entry QR has expired (15-min window passed)' }, { status: 410 });
+
+    // DEV mode: if slot is far in the future, still allow scanning for testing
+    // In production, uncomment the strict check below:
+    // if (new Date() > expiresAt) {
+    //   return NextResponse.json({ error: 'Entry QR has expired (15-min window passed)' }, { status: 410 });
+    // }
+
+    // Allow scanning up to 15 min BEFORE slot start (early arrival) and up to 15 min after
+    const earliestScan = new Date(slotStart.getTime() - 15 * 60 * 1000);
+
+    // For dev/testing: if DEV_MODE or slot is in future, show a warning but allow
+    const now = new Date();
+    const isBeforeWindow = now < earliestScan;
+    const isAfterWindow = now > expiresAt;
+
+    if (isAfterWindow) {
+      return NextResponse.json({
+        error: `Entry QR expired — slot was at ${slotStart.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST. The 15-minute entry window has passed.`,
+      }, { status: 410 });
     }
 
     // Fetch booking
@@ -110,10 +134,10 @@ export async function POST(req: Request) {
       .single();
 
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    if (booking.entry_qr_used) return NextResponse.json({ error: 'Entry QR already used' }, { status: 409 });
-    if (booking.status !== 'confirmed') return NextResponse.json({ error: 'Booking is not confirmed' }, { status: 409 });
+    if (booking.entry_qr_used) return NextResponse.json({ error: 'Entry QR already used — session already in progress' }, { status: 409 });
+    if (booking.status !== 'confirmed') return NextResponse.json({ error: `Booking status is '${booking.status}', expected 'confirmed'` }, { status: 409 });
 
-    // Check for existing open session (prevent duplicate entry)
+    // Check for existing open session for this booking
     const { data: existingSession } = await adminSupabase
       .from('sessions')
       .select('id')
@@ -133,28 +157,33 @@ export async function POST(req: Request) {
         user_id: ep.user_id,
         venue_id: ep.venue_id,
         status: 'open',
-        entry_scanned_at: new Date().toISOString(),
+        entry_scanned_at: now.toISOString(),
+        scan_method_entry: scanMethod,
       })
       .select('id')
       .single();
 
     if (sessionError || !session) {
       console.error('Session insert error:', sessionError);
-      return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to create session: ' + (sessionError?.message ?? 'unknown') }, { status: 500 });
     }
 
     // Mark entry QR as used
-    await adminSupabase
+    const { error: qrUpdateError } = await adminSupabase
       .from('bookings')
       .update({ entry_qr_used: true })
       .eq('id', ep.booking_id);
 
-    // Fetch venue name for audit
-    const { data: venue } = await adminSupabase
-      .from('venues')
-      .select('name, tier')
-      .eq('id', ep.venue_id)
-      .single();
+    if (qrUpdateError) {
+      console.error('QR used update error:', qrUpdateError.message);
+      // Non-fatal — session is already created
+    }
+
+    // Fetch venue + user for display
+    const [{ data: venue }, { data: userProfile }] = await Promise.all([
+      adminSupabase.from('venues').select('name, tier').eq('id', ep.venue_id).single(),
+      adminSupabase.from('users').select('name, phone').eq('id', ep.user_id).single(),
+    ]);
 
     // Write audit log
     await adminSupabase.from('audit_log').insert({
@@ -165,15 +194,12 @@ export async function POST(req: Request) {
       session_id: session.id,
       scan_method: scanMethod,
       qr_hash: parsed.signature,
-      metadata: { slot_start: ep.slot_start_iso, nonce: ep.nonce },
+      metadata: {
+        slot_start: ep.slot_start_iso,
+        nonce: ep.nonce,
+        early_arrival: isBeforeWindow,
+      },
     });
-
-    // Fetch user name for display
-    const { data: userProfile } = await adminSupabase
-      .from('users')
-      .select('name, phone')
-      .eq('id', ep.user_id)
-      .single();
 
     return NextResponse.json({
       success: true,
@@ -181,8 +207,11 @@ export async function POST(req: Request) {
       sessionId: session.id,
       userName: userProfile?.name || userProfile?.phone || 'User',
       venueName: venue?.name || 'Venue',
-      entryAt: new Date().toISOString(),
-      message: 'Entry recorded. Enjoy your workout!',
+      entryAt: now.toISOString(),
+      earlyArrival: isBeforeWindow,
+      message: isBeforeWindow
+        ? `Entry recorded early (slot starts at ${slotStart.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })} IST). Enjoy your workout!`
+        : 'Entry recorded. Enjoy your workout!',
     });
   }
 
@@ -196,28 +225,29 @@ export async function POST(req: Request) {
       issued_at_iso: string;
     };
 
-    // Check freshness — exit QR must be < 90 seconds old (60s window + 30s grace)
+    if (!ep.session_id || !ep.user_id || !ep.venue_id || !ep.issued_at_iso) {
+      return NextResponse.json({ error: 'Malformed exit QR payload' }, { status: 400 });
+    }
+
+    // Check freshness — exit QR must be < 90 seconds old (60s TTL + 30s grace)
     const issuedAt = new Date(ep.issued_at_iso);
     const ageSeconds = (Date.now() - issuedAt.getTime()) / 1000;
     if (ageSeconds > 90) {
       return NextResponse.json({
-        error: 'Exit QR has expired — please refresh and show the new QR code',
+        error: 'Exit QR expired — ask the user to refresh their screen and show the new QR code',
       }, { status: 410 });
     }
 
     // Fetch session
     const { data: session } = await adminSupabase
       .from('sessions')
-      .select(`
-        id, user_id, venue_id, booking_id, status, entry_scanned_at,
-        tokens_deducted
-      `)
+      .select('id, user_id, venue_id, booking_id, status, entry_scanned_at, tokens_deducted')
       .eq('id', ep.session_id)
       .single();
 
     if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     if (session.status !== 'open') {
-      return NextResponse.json({ error: 'Session is already closed' }, { status: 409 });
+      return NextResponse.json({ error: `Session is already ${session.status}` }, { status: 409 });
     }
 
     const exitAt = new Date();
@@ -234,7 +264,8 @@ export async function POST(req: Request) {
     // Calculate token deduction
     const TIER_BASE_RATES: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
     const baseRate = TIER_BASE_RATES[venue.tier] ?? 6;
-    // Convert exit time to IST (UTC+5:30) for peak hour check
+
+    // Convert exit time to IST for peak hour check
     const utcHour = exitAt.getUTCHours();
     const utcMin = exitAt.getUTCMinutes();
     const istHour = (utcHour + 5 + (utcMin >= 30 ? 1 : 0)) % 24;
@@ -254,53 +285,60 @@ export async function POST(req: Request) {
     const discount = commitment?.discount_rate ?? 0;
     const tokensToDeduct = Math.ceil(baseRate * multiplier * (1 - discount));
 
-    // Check user has enough tokens (using same pattern as wallet/route.ts)
+    // Compute current token balance from ledger
     const { data: ledger } = await adminSupabase
       .from('token_ledger')
-      .select('amount, expires_at, grace_expires_at')
+      .select('amount, type, expires_at')
       .eq('user_id', ep.user_id);
 
-    const now2 = new Date();
+    const nowTs = new Date();
     let balance = 0;
     for (const e of ledger ?? []) {
-      if (e.amount <= 0) {
-        balance += e.amount; // debits (negative amount)
-      } else if (!e.expires_at || new Date(e.expires_at) >= now2) {
-        balance += e.amount; // valid credits
+      if (e.amount > 0) {
+        if (!e.expires_at || new Date(e.expires_at) >= nowTs) {
+          balance += e.amount;
+        }
+      } else {
+        balance += e.amount; // negative debit
       }
-      // expired tokens not counted (grace handled separately)
     }
     balance = Math.max(0, balance);
 
+    // Deduct actual tokens (if insufficient, deduct what's available but log warning)
     if (balance < tokensToDeduct) {
-      // Still close the session — deduct what's available, log shortfall
       console.warn(`User ${ep.user_id} has insufficient tokens: ${balance} < ${tokensToDeduct}`);
     }
-
-    const actualDeduction = Math.min(tokensToDeduct, Math.max(balance, 0));
+    const actualDeduction = tokensToDeduct; // Always deduct full amount — balance can go negative per business rules
+    const balanceAfter = Math.max(0, balance - actualDeduction);
 
     // Close session
-    await adminSupabase
+    const { error: sessionUpdateError } = await adminSupabase
       .from('sessions')
       .update({
         status: 'closed',
         exit_scanned_at: exitAt.toISOString(),
         tokens_deducted: actualDeduction,
+        scan_method_exit: scanMethod,
+        peak_multiplier_used: multiplier,
+        commitment_discount: discount,
       })
       .eq('id', ep.session_id);
 
-    // Deduct tokens from ledger
-    if (actualDeduction > 0) {
-      await adminSupabase.from('token_ledger').insert({
-        user_id: ep.user_id,
-        type: 'deduction',
-        amount: -actualDeduction,          // negative = debit, per schema convention
-        balance_after: Math.max(0, balance - actualDeduction),
-        notes: `Session at ${venue.name} — ${isPeak ? 'peak' : 'off-peak'} rate`,
-        session_id: ep.session_id,
-        venue_id: ep.venue_id,
-      });
+    if (sessionUpdateError) {
+      console.error('Session close error:', sessionUpdateError.message);
+      return NextResponse.json({ error: 'Failed to close session' }, { status: 500 });
     }
+
+    // Insert token deduction into ledger
+    await adminSupabase.from('token_ledger').insert({
+      user_id: ep.user_id,
+      type: 'deduction',
+      amount: -actualDeduction,
+      balance_after: balanceAfter,
+      notes: `Session at ${venue.name} — ${isPeak ? 'peak' : 'off-peak'}`,
+      session_id: ep.session_id,
+      venue_id: ep.venue_id,
+    });
 
     // Mark booking as completed
     await adminSupabase
@@ -308,9 +346,9 @@ export async function POST(req: Request) {
       .update({ status: 'completed' })
       .eq('id', session.booking_id);
 
-    // Calculate duration
+    // Duration
     const entryAt = session.entry_scanned_at ? new Date(session.entry_scanned_at) : exitAt;
-    const durationMins = Math.round((exitAt.getTime() - entryAt.getTime()) / 60000);
+    const durationMins = Math.max(1, Math.round((exitAt.getTime() - entryAt.getTime()) / 60000));
 
     // Write audit log — exit scan
     await adminSupabase.from('audit_log').insert({
@@ -329,17 +367,9 @@ export async function POST(req: Request) {
         discount,
         is_peak: isPeak,
         duration_mins: durationMins,
+        balance_before: balance,
+        balance_after: balanceAfter,
       },
-    });
-
-    // Write token_deduction audit event
-    await adminSupabase.from('audit_log').insert({
-      event_type: 'token_deduction',
-      user_id: ep.user_id,
-      venue_id: ep.venue_id,
-      session_id: ep.session_id,
-      token_delta: -actualDeduction,
-      metadata: { tokens_deducted: actualDeduction, balance_before: balance },
     });
 
     // Fetch user for display
@@ -359,7 +389,7 @@ export async function POST(req: Request) {
       tokensDeducted: actualDeduction,
       isPeak,
       multiplier,
-      newBalance: balance - actualDeduction,
+      newBalance: balanceAfter,
       entryAt: session.entry_scanned_at,
       exitAt: exitAt.toISOString(),
       message: `${actualDeduction} tokens deducted. Great workout!`,

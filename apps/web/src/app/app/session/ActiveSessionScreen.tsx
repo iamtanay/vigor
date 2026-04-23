@@ -2,13 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import VigorLogo from '@/components/VigorLogo';
 import TokenChip from '@/components/TokenChip';
 import TierBadge from '@/components/TierBadge';
 
-// ── Tiny QR code generator using the qrcode library loaded via CDN script tag
-// We use a canvas-based approach with the `qrcode` npm package
-// imported dynamically so it doesn't bloat server bundle
 declare const QRCode: any;
 
 interface ActiveSession {
@@ -17,15 +13,16 @@ interface ActiveSession {
   entry_scanned_at: string;
   status: string;
   venues: { name: string; tier: string; address: string };
-  bookings: { id: string; venue_slots: { slot_date: string; start_time: string; end_time: string } };
+  bookings: { id: string; venue_slots: { slot_date: string; start_time: string; end_time: string } } | null;
 }
 
 interface Props {
   initialSession: ActiveSession | null;
   userId: string;
+  initialBookingId?: string | null;
 }
 
-type ViewMode = 'no-session' | 'entry-qr' | 'active-session' | 'session-summary';
+type ViewMode = 'loading' | 'no-session' | 'entry-qr' | 'active-session' | 'session-summary';
 
 interface SessionSummary {
   venueName: string;
@@ -49,82 +46,75 @@ function formatTime(iso: string | null) {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-// ── Simple QR renderer using canvas + qrcode-generator (no external CDN needed)
-// We implement a minimal QR using SVG path from the API — or use a data URL
-// approach via the browser's built-in canvas API with a helper
+function formatSlotDate(dateStr: string) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  if (d.getTime() === today.getTime()) return 'Today';
+  if (d.getTime() === tomorrow.getTime()) return 'Tomorrow';
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// ── QR Display using qrserver.com free API ────────────────────────────────────
 function QRDisplay({ value, size = 220 }: { value: string; size?: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!value || !canvasRef.current) return;
+    setLoaded(false);
+    setError(false);
+  }, [value]);
 
-    // Dynamically load qrcode library
-    if (typeof window !== 'undefined' && !(window as any).QRCodeLib) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-      script.onload = () => {
-        setLoaded(true);
-        renderQR();
-      };
-      document.head.appendChild(script);
-    } else {
-      setLoaded(true);
-      renderQR();
-    }
-
-    function renderQR() {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      // Use canvas 2d to draw QR manually via a simple approach
-      // We'll use the URL-based QR API as fallback
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Draw placeholder while we fetch
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, size, size);
-
-      // Use Google Charts QR API (free, no key needed)
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}&bgcolor=ffffff&color=1A1A2E&margin=2`;
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, size, size);
-      };
-      img.onerror = () => {
-        // Fallback: draw a placeholder
-        ctx.fillStyle = '#1A1A2E';
-        ctx.fillRect(0, 0, size, size);
-        ctx.fillStyle = '#6C63FF';
-        ctx.font = `${size * 0.08}px system-ui`;
-        ctx.textAlign = 'center';
-        ctx.fillText('QR unavailable', size / 2, size / 2);
-        ctx.font = `${size * 0.05}px system-ui`;
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.fillText('Check connection', size / 2, size / 2 + size * 0.12);
-      };
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, size]);
+  const src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(value)}&bgcolor=ffffff&color=1A1A2E&margin=2&ecc=M`;
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={size}
-      height={size}
-      style={{ borderRadius: 16, display: 'block' }}
-    />
+    <div style={{ width: size, height: size, position: 'relative' }}>
+      {!loaded && !error && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#f8f8f8', borderRadius: 12,
+        }}>
+          <div style={{ fontSize: 12, color: '#6C63FF' }}>Loading QR…</div>
+        </div>
+      )}
+      {error && (
+        <div style={{
+          width: size, height: size,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 8,
+          background: '#1A1A2E', borderRadius: 12,
+        }}>
+          <div style={{ fontSize: 24 }}>📵</div>
+          <div style={{ fontSize: 11, color: '#FF6B6B', textAlign: 'center' }}>
+            QR unavailable<br />
+            <span style={{ color: 'rgba(255,255,255,0.4)' }}>Check internet</span>
+          </div>
+        </div>
+      )}
+      <img
+        ref={imgRef}
+        src={src}
+        width={size}
+        height={size}
+        alt="QR Code"
+        style={{
+          borderRadius: 12,
+          display: loaded ? 'block' : 'none',
+        }}
+        onLoad={() => setLoaded(true)}
+        onError={() => setError(true)}
+      />
+    </div>
   );
 }
 
-// ── Countdown ring component
+// ── Countdown ring ─────────────────────────────────────────────────────────────
 function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
   const r = 20;
   const circ = 2 * Math.PI * r;
-  const pct = seconds / total;
+  const pct = Math.max(0, Math.min(1, seconds / total));
   const dash = circ * pct;
   const color = seconds <= 10 ? '#FF6B6B' : seconds <= 20 ? '#FFD166' : '#39D98A';
 
@@ -154,11 +144,11 @@ function CountdownRing({ seconds, total }: { seconds: number; total: number }) {
   );
 }
 
-export default function ActiveSessionScreen({ initialSession, userId }: Props) {
+export default function ActiveSessionScreen({ initialSession, userId, initialBookingId }: Props) {
   const router = useRouter();
 
   const [session, setSession] = useState<ActiveSession | null>(initialSession);
-  const [mode, setMode] = useState<ViewMode>(initialSession ? 'active-session' : 'no-session');
+  const [mode, setMode] = useState<ViewMode>(initialSession ? 'active-session' : 'loading');
 
   // Entry QR state
   const [entryBookingId, setEntryBookingId] = useState<string | null>(null);
@@ -167,13 +157,15 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
   const [entrySecondsLeft, setEntrySecondsLeft] = useState(0);
   const [entryLoading, setEntryLoading] = useState(false);
   const [entryError, setEntryError] = useState<string | null>(null);
+  const [entryVenueName, setEntryVenueName] = useState<string>('');
+  const [entrySlotInfo, setEntrySlotInfo] = useState<string>('');
+  const [entryMinutesUntil, setEntryMinutesUntil] = useState<number>(0);
 
   // Exit QR state
   const [exitQR, setExitQR] = useState<string | null>(null);
   const [exitCountdown, setExitCountdown] = useState(60);
   const [exitLoading, setExitLoading] = useState(false);
   const exitIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const exitRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Session timer
   const [sessionMins, setSessionMins] = useState(0);
@@ -205,14 +197,74 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
     const tick = () => {
       const secs = Math.max(0, Math.round((entryQRExpiry.getTime() - Date.now()) / 1000));
       setEntrySecondsLeft(secs);
-      if (secs === 0) setEntryQR(null);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [entryQRExpiry]);
 
-  // ── Poll /api/sessions/active to detect when gym scans exit QR and session closes
+  // ── Check for active session on mount (handles case where entry was just scanned)
+  useEffect(() => {
+    if (initialSession) {
+      // Already have session — no need to check
+      setMode('active-session');
+      return;
+    }
+
+    // Check if there's now an active session (may have been scanned since page load)
+    fetch('/api/sessions/active')
+      .then(r => r.json())
+      .then(data => {
+        if (data.session) {
+          // There's an active session — fetch full details and show exit QR
+          refreshSession(data.session.id);
+        } else if (initialBookingId) {
+          // Came here from booking confirm page — auto-generate entry QR
+          generateEntryQR(initialBookingId);
+        } else {
+          setMode('no-session');
+        }
+      })
+      .catch(() => {
+        if (initialBookingId) {
+          generateEntryQR(initialBookingId);
+        } else {
+          setMode('no-session');
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Fetch full session details (when we only have session ID from active API)
+  async function refreshSession(sessionId: string) {
+    try {
+      const res = await fetch('/api/sessions/active');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.session) {
+        // Construct minimal session object for exit QR mode
+        setSession({
+          id: data.session.id,
+          venue_id: data.session.venueId,
+          entry_scanned_at: data.session.entryScannedAt,
+          status: 'open',
+          venues: {
+            name: data.session.venueName,
+            tier: data.session.venueTier,
+            address: data.session.venueAddress,
+          },
+          bookings: null,
+        });
+        setMode('active-session');
+      } else {
+        setMode('no-session');
+      }
+    } catch {
+      setMode('no-session');
+    }
+  }
+
+  // ── Poll for session closure while showing exit QR
   const pollForSessionClosure = useCallback(async () => {
     if (!session) return;
     try {
@@ -220,22 +272,22 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       if (!res.ok) return;
       const data = await res.json();
       if (!data.session) {
-        // Session is now closed — fetch summary from the closed session endpoint
+        // Session closed — fetch summary
         const summaryRes = await fetch(`/api/sessions/summary?sessionId=${session.id}`);
         if (summaryRes.ok) {
           const summaryData = await summaryRes.json();
           setSummary(summaryData);
           setMode('session-summary');
+          if (exitIntervalRef.current) clearInterval(exitIntervalRef.current);
         } else {
-          // Can't get summary — gracefully go to no-session
           setSession(null);
           setMode('no-session');
         }
       }
-    } catch { /* ignore poll errors */ }
+    } catch { /* ignore */ }
   }, [session]);
 
-  // ── Exit QR auto-refresh every 60s
+  // ── Fetch exit QR
   const fetchExitQR = useCallback(async () => {
     if (!session) return;
     setExitLoading(true);
@@ -247,8 +299,7 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       });
       if (!res.ok) {
         const err = await res.json();
-        if (err.error?.includes('already closed') || res.status === 404) {
-          // Session was closed (by gym exit scan or auto-close) — show summary
+        if (res.status === 404 || err.error?.includes('closed') || err.error?.includes('No open session')) {
           await pollForSessionClosure();
           return;
         }
@@ -262,13 +313,12 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
     }
   }, [session, pollForSessionClosure]);
 
+  // ── Setup exit QR auto-refresh when mode = active-session
   useEffect(() => {
     if (mode !== 'active-session' || !session) return;
 
-    // Initial fetch
     fetchExitQR();
 
-    // Countdown tick
     exitIntervalRef.current = setInterval(() => {
       setExitCountdown(prev => {
         if (prev <= 1) {
@@ -279,20 +329,17 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       });
     }, 1000);
 
-    // Background poll every 10s to catch exit scan between QR refreshes
-    const pollInterval = setInterval(() => {
-      pollForSessionClosure();
-    }, 10000);
+    // Poll every 10s for closure
+    const pollInterval = setInterval(pollForSessionClosure, 10000);
 
     return () => {
       if (exitIntervalRef.current) clearInterval(exitIntervalRef.current);
-      if (exitRefreshRef.current) clearTimeout(exitRefreshRef.current);
       clearInterval(pollInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, session?.id]);
 
-  // ── Generate entry QR for a booking
+  // ── Generate entry QR
   async function generateEntryQR(bookingId: string) {
     setEntryLoading(true);
     setEntryError(null);
@@ -305,15 +352,31 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
       const data = await res.json();
       if (!res.ok) {
         setEntryError(data.error || 'Failed to generate QR');
+        setMode('no-session');
         return;
       }
       setEntryQR(data.qrString);
       setEntryQRExpiry(new Date(data.expiresAt));
       setEntryBookingId(bookingId);
+      setEntryVenueName(data.venueName ?? '');
+      setEntryMinutesUntil(data.minutesUntilSlot ?? 0);
+      if (data.minutesUntilSlot != null) {
+        const slotDt = new Date(data.slotStart);
+        setEntrySlotInfo(`${formatSlotDate(slotDt.toISOString().slice(0, 10))} · ${slotDt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}`);
+      }
       setMode('entry-qr');
     } finally {
       setEntryLoading(false);
     }
+  }
+
+  // ── Loading state
+  if (mode === 'loading') {
+    return (
+      <div className="mobile-viewport" style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Loading session…</div>
+      </div>
+    );
   }
 
   // ── No active session view
@@ -328,13 +391,27 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           Book a slot and show your entry QR at the gym to start a session
         </div>
 
-        {/* Generate entry QR from upcoming booking */}
-        <EntryQRLauncher onGenerate={generateEntryQR} loading={entryLoading} error={entryError} />
+        {entryError && (
+          <div style={{
+            background: 'rgba(255,107,107,0.12)',
+            border: '1px solid rgba(255,107,107,0.25)',
+            borderRadius: 12,
+            padding: '10px 14px',
+            marginBottom: 16,
+            fontSize: 13,
+            color: '#FF6B6B',
+            width: '100%',
+          }}>
+            {entryError}
+          </div>
+        )}
+
+        <EntryQRLauncher onGenerate={generateEntryQR} loading={entryLoading} error={null} />
 
         <button
           onClick={() => router.push('/app/explore')}
           style={{
-            marginTop: 16,
+            marginTop: 12,
             background: 'transparent',
             border: '1px solid rgba(108,99,255,0.3)',
             color: '#6C63FF',
@@ -354,16 +431,43 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
 
   // ── Entry QR view
   if (mode === 'entry-qr' && entryQR) {
+    const isFutureSlot = entryMinutesUntil > 15;
     return (
-      <div className="mobile-viewport page-slide-in" style={{ minHeight: '100dvh', padding: '20px 20px', display: 'flex', flexDirection: 'column' }}>
+      <div className="mobile-viewport page-slide-in" style={{ minHeight: '100dvh', padding: '20px', display: 'flex', flexDirection: 'column' }}>
         <button onClick={() => setMode('no-session')} style={{ background: 'none', border: 'none', color: '#6C63FF', fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 24, alignSelf: 'flex-start' }}>
           ‹ Back
         </button>
 
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>Show this to staff at entry</div>
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 4 }}>
+            {entryVenueName}
+          </div>
           <div style={{ fontSize: 20, fontWeight: 500, color: '#fff' }}>Entry QR Code</div>
+          {entrySlotInfo && (
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
+              {entrySlotInfo}
+            </div>
+          )}
         </div>
+
+        {/* Future slot warning */}
+        {isFutureSlot && (
+          <div style={{
+            background: 'rgba(255,209,102,0.1)',
+            border: '1px solid rgba(255,209,102,0.3)',
+            borderRadius: 12,
+            padding: '10px 14px',
+            marginBottom: 16,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'flex-start',
+          }}>
+            <span style={{ fontSize: 16 }}>⏰</span>
+            <div style={{ fontSize: 12, color: '#FFD166', lineHeight: 1.5 }}>
+              Your slot starts in ~{entryMinutesUntil} min. Show this QR at the gym when you arrive — it becomes scannable 15 min before slot start.
+            </div>
+          </div>
+        )}
 
         {/* QR Container */}
         <div style={{
@@ -372,10 +476,8 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           padding: 16,
           margin: '0 auto',
           boxShadow: '0 0 40px rgba(108,99,255,0.3)',
-          position: 'relative',
-          overflow: 'hidden',
         }}>
-          {entrySecondsLeft <= 0 ? (
+          {entrySecondsLeft <= 0 && entryQRExpiry ? (
             <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
               <div style={{ fontSize: 32 }}>⏱️</div>
               <div style={{ fontSize: 13, color: '#FF6B6B', fontWeight: 500 }}>QR Expired</div>
@@ -389,36 +491,36 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           )}
         </div>
 
-        {/* Countdown */}
+        {/* Countdown — only show if expiry is within 15 minutes */}
         <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <div style={{
-              width: 10, height: 10, borderRadius: '50%',
-              background: entrySecondsLeft > 60 ? '#39D98A' : entrySecondsLeft > 30 ? '#FFD166' : '#FF6B6B',
-              boxShadow: `0 0 8px ${entrySecondsLeft > 60 ? '#39D98A' : entrySecondsLeft > 30 ? '#FFD166' : '#FF6B6B'}`,
-            }} />
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)' }}>
-              Valid for <span style={{ color: '#fff', fontWeight: 500 }}>{Math.floor(entrySecondsLeft / 60)}:{pad(entrySecondsLeft % 60)}</span>
+          {!isFutureSlot && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: entrySecondsLeft > 300 ? '#39D98A' : entrySecondsLeft > 60 ? '#FFD166' : '#FF6B6B',
+                boxShadow: `0 0 8px ${entrySecondsLeft > 300 ? '#39D98A' : entrySecondsLeft > 60 ? '#FFD166' : '#FF6B6B'}`,
+              }} />
+              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)' }}>
+                Valid for <span style={{ color: '#fff', fontWeight: 500 }}>{Math.floor(entrySecondsLeft / 60)}:{pad(entrySecondsLeft % 60)}</span>
+              </div>
             </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 6 }}>
-            Single-use · Expires 15 min after slot start
+          )}
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
+            Single-use · Show this to staff at the gym entrance
           </div>
         </div>
 
         {/* Instructions */}
         <div style={{
-          marginTop: 28,
-          background: 'var(--color-card-dark)',
-          borderRadius: 14,
-          padding: '14px 16px',
+          marginTop: 28, background: 'var(--color-card-dark)',
+          borderRadius: 14, padding: '14px 16px',
         }}>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>What happens next</div>
           {[
             { icon: '📱', text: 'Show this QR to the staff or kiosk at entry' },
             { icon: '✅', text: 'Your session starts when they scan it' },
             { icon: '🏋️', text: 'Work out — tokens are not deducted yet' },
-            { icon: '📤', text: 'Open this screen again when leaving to show your exit QR' },
+            { icon: '📤', text: 'Come back to this screen when leaving to show your Exit QR' },
           ].map((item, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: i < 3 ? '0.5px solid rgba(255,255,255,0.06)' : 'none' }}>
               <span style={{ fontSize: 16 }}>{item.icon}</span>
@@ -433,7 +535,6 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
   // ── Active Session (Exit QR) view
   if (mode === 'active-session' && session) {
     const venue = session.venues;
-    const slot = (session.bookings as any)?.venue_slots;
     const autoCloseWarning = sessionMins > 210;
 
     return (
@@ -450,12 +551,8 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
         {/* Session info */}
         <div style={{
           background: 'var(--color-card-dark)',
-          borderRadius: 16,
-          padding: '14px 16px',
-          marginBottom: 20,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          borderRadius: 16, padding: '14px 16px', marginBottom: 20,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 4 }}>Duration</div>
@@ -475,12 +572,8 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           <div style={{
             background: 'rgba(255,107,107,0.12)',
             border: '1px solid rgba(255,107,107,0.3)',
-            borderRadius: 12,
-            padding: '10px 14px',
-            marginBottom: 16,
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
+            borderRadius: 12, padding: '10px 14px', marginBottom: 16,
+            display: 'flex', gap: 8, alignItems: 'center',
           }}>
             <span style={{ fontSize: 16 }}>⚠️</span>
             <div style={{ fontSize: 12, color: '#FF6B6B', lineHeight: 1.5 }}>
@@ -498,9 +591,7 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
         {/* QR + countdown */}
         <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
           <div style={{
-            background: '#fff',
-            borderRadius: 20,
-            padding: 16,
+            background: '#fff', borderRadius: 20, padding: 16,
             boxShadow: '0 0 40px rgba(57,217,138,0.25)',
           }}>
             {exitLoading && !exitQR ? (
@@ -509,17 +600,19 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
               </div>
             ) : exitQR ? (
               <QRDisplay value={exitQR} size={220} />
-            ) : null}
+            ) : (
+              <div style={{ width: 220, height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ fontSize: 13, color: 'rgba(0,0,0,0.4)' }}>Loading…</div>
+              </div>
+            )}
           </div>
 
           {/* Countdown badge */}
           <div style={{
-            position: 'absolute',
-            top: -10, right: '50%',
+            position: 'absolute', top: -10, right: '50%',
             transform: 'translateX(120px)',
             background: 'var(--color-deep-space)',
-            borderRadius: '50%',
-            padding: 2,
+            borderRadius: '50%', padding: 2,
             border: '2px solid var(--color-card-dark)',
           }}>
             <CountdownRing seconds={exitCountdown} total={60} />
@@ -528,14 +621,13 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
 
         <div style={{ textAlign: 'center', marginTop: 12, marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>
-            Refreshes every 60 seconds · Old QR instantly invalid
+            Refreshes every 60 seconds · Scanned QR instantly invalid
           </div>
         </div>
 
         {/* Token cost preview */}
         <TokenCostPreview venueTier={venue.tier} />
 
-        {/* Session ID */}
         <div style={{ textAlign: 'center', marginTop: 20 }}>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
             Session #{session.id.slice(0, 8).toUpperCase()}
@@ -545,12 +637,11 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
     );
   }
 
-  // ── Session Summary (after exit scan — polled)
+  // ── Session Summary (after exit scan)
   if (mode === 'session-summary' && summary) {
     const durationStr = formatDuration(summary.durationMins);
     return (
       <div className="mobile-viewport page-slide-in" style={{ minHeight: '100dvh', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* Success bloom */}
         <div style={{
           width: 80, height: 80, borderRadius: '50%',
           background: 'rgba(57,217,138,0.15)',
@@ -558,10 +649,7 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 36,
           marginTop: 40, marginBottom: 24,
-          animation: 'bloom 0.5s ease-out',
-        }}>
-          ✓
-        </div>
+        }}>✓</div>
 
         <div style={{ fontSize: 22, fontWeight: 500, color: '#fff', marginBottom: 6, textAlign: 'center' }}>
           Great workout!
@@ -570,7 +658,6 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           {summary.venueName}
         </div>
 
-        {/* Stats */}
         <div style={{ background: 'var(--color-card-dark)', borderRadius: 16, padding: 20, width: '100%', marginBottom: 16 }}>
           {[
             { label: 'Duration', value: durationStr, color: '#fff' },
@@ -585,26 +672,15 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
           ))}
         </div>
 
-        <button
-          onClick={() => router.push('/app/home')}
-          style={{
-            background: '#6C63FF', color: '#fff', border: 'none', borderRadius: 24,
-            padding: '14px', width: '100%', fontSize: 15, fontWeight: 500, cursor: 'pointer',
-            marginBottom: 12,
-          }}
-        >
-          Back to home
-        </button>
-        <button
-          onClick={() => router.push('/app/explore')}
-          style={{
-            background: 'transparent', color: '#6C63FF',
-            border: '1px solid rgba(108,99,255,0.3)',
-            borderRadius: 24, padding: '14px', width: '100%', fontSize: 15, fontWeight: 500, cursor: 'pointer',
-          }}
-        >
-          Book another session
-        </button>
+        <button onClick={() => router.push('/app/home')} style={{
+          background: '#6C63FF', color: '#fff', border: 'none', borderRadius: 24,
+          padding: '14px', width: '100%', fontSize: 15, fontWeight: 500, cursor: 'pointer', marginBottom: 12,
+        }}>Back to home</button>
+        <button onClick={() => router.push('/app/explore')} style={{
+          background: 'transparent', color: '#6C63FF',
+          border: '1px solid rgba(108,99,255,0.3)',
+          borderRadius: 24, padding: '14px', width: '100%', fontSize: 15, fontWeight: 500, cursor: 'pointer',
+        }}>Book another session</button>
       </div>
     );
   }
@@ -612,7 +688,7 @@ export default function ActiveSessionScreen({ initialSession, userId }: Props) {
   return null;
 }
 
-// ── Sub-component: Entry QR launcher (picks from upcoming bookings)
+// ── Sub-component: Entry QR launcher — shows ALL upcoming bookings
 function EntryQRLauncher({
   onGenerate,
   loading,
@@ -629,10 +705,18 @@ function EntryQRLauncher({
     fetch('/api/sessions/upcoming-bookings')
       .then(r => r.json())
       .then(d => setBookings(d.bookings || []))
+      .catch(() => {})
       .finally(() => setFetching(false));
   }, []);
 
-  if (fetching) return <div style={{ height: 60 }} />;
+  if (fetching) {
+    return (
+      <div style={{ width: '100%', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>Loading bookings…</div>
+      </div>
+    );
+  }
+
   if (bookings.length === 0) return null;
 
   return (
@@ -640,31 +724,58 @@ function EntryQRLauncher({
       {error && (
         <div style={{ color: '#FF6B6B', fontSize: 13, marginBottom: 8 }}>{error}</div>
       )}
-      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>Your upcoming booking:</div>
-      {bookings.slice(0, 1).map((b: any) => (
-        <button
-          key={b.id}
-          onClick={() => onGenerate(b.id)}
-          disabled={loading}
-          style={{
-            width: '100%',
-            background: '#6C63FF',
-            border: 'none',
-            borderRadius: 14,
-            padding: '14px 16px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            textAlign: 'left',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          <div style={{ fontSize: 14, fontWeight: 500, color: '#fff' }}>
-            {loading ? 'Generating QR…' : `Get Entry QR — ${b.venues?.name}`}
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>
-            {b.venue_slots?.slot_date} · {b.venue_slots?.start_time?.slice(0, 5)}
-          </div>
-        </button>
-      ))}
+      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 8, textAlign: 'left' }}>
+        Your upcoming bookings:
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+        {bookings.map((b: any) => {
+          const slot = b.venue_slots;
+          const venue = b.venues;
+          const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}+05:30`) : null;
+          const isReady = b.inEntryWindow;
+          const minsUntil = b.minutesUntil;
+
+          return (
+            <button
+              key={b.id}
+              onClick={() => onGenerate(b.id)}
+              disabled={loading}
+              style={{
+                width: '100%',
+                background: isReady ? '#6C63FF' : 'var(--color-card-dark)',
+                border: isReady ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 14,
+                padding: '14px 16px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                textAlign: 'left',
+                opacity: loading ? 0.7 : 1,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: '#fff', marginBottom: 2 }}>
+                    {loading ? 'Generating QR…' : `Get Entry QR — ${venue?.name ?? ''}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2 }}>
+                    {slot ? `${formatSlotDate(slot.slot_date)} · ${slot.start_time?.slice(0, 5)}` : ''}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+                  {isReady ? (
+                    <span style={{ fontSize: 11, color: '#fff', background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 8 }}>
+                      Ready ✓
+                    </span>
+                  ) : minsUntil != null && minsUntil > 0 ? (
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+                      in {minsUntil < 60 ? `${minsUntil}m` : `${Math.floor(minsUntil / 60)}h`}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -682,22 +793,17 @@ function TokenCostPreview({ venueTier }: { venueTier: string }) {
 
   return (
     <div style={{
-      background: 'var(--color-card-dark)',
-      borderRadius: 12,
-      padding: '12px 14px',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      background: 'var(--color-card-dark)', borderRadius: 12, padding: '12px 14px',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     }}>
       <div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Est. token cost</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Est. token cost on exit</div>
         <div style={{ fontSize: 18, fontWeight: 500, color: isPeak ? '#FF6B6B' : '#39D98A', marginTop: 2 }}>
           {cost} tokens
         </div>
       </div>
       <div style={{
-        fontSize: 11, fontWeight: 500,
-        padding: '4px 10px', borderRadius: 20,
+        fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 20,
         background: isPeak ? 'rgba(255,107,107,0.15)' : 'rgba(57,217,138,0.15)',
         color: isPeak ? '#FF6B6B' : '#39D98A',
         border: `1px solid ${isPeak ? 'rgba(255,107,107,0.3)' : 'rgba(57,217,138,0.3)'}`,

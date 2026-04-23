@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import TierBadge from '@/components/TierBadge';
 import TokenChip from '@/components/TokenChip';
@@ -13,23 +14,40 @@ interface Props {
   activeSession: any | null;
 }
 
-function isPeakHour() {
-  const h = (new Date().getHours() + 5 + (new Date().getMinutes() >= 30 ? 1 : 0)) % 24;
-  return (h >= 6 && h < 9) || (h >= 17 && h < 21);
-}
+const TIER_BASE: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
 
 function tokenCost(tier: string, peak: boolean) {
-  const base: Record<string, number> = { bronze: 6, silver: 10, gold: 16 };
-  const r = base[tier] ?? 6;
+  const r = TIER_BASE[tier] ?? 6;
   return peak ? Math.ceil(r * 1.5) : r;
 }
 
 export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, upcomingBooking, activeSession }: Props) {
-  const peak = isPeakHour();
+  // All time-dependent state lives in useEffect to avoid SSR/client hydration mismatch.
+  // Server renders with neutral defaults; client immediately updates after mount.
+  const [greeting, setGreeting] = useState('Welcome');
+  const [peak, setPeak] = useState(false);
+  const [daysUntilExpiry, setDaysUntilExpiry] = useState<number | null>(null);
 
-  const daysUntilExpiry = tokenExpiry
-    ? Math.ceil((new Date(tokenExpiry).getTime() - Date.now()) / (86400 * 1000))
-    : null;
+  useEffect(() => {
+    const now = new Date();
+    const h = now.getHours();
+
+    // Greeting
+    setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
+
+    // Peak hour (IST): 6–9am and 5–9pm
+    // getHours() returns local time — on user's device this IS IST if they're in India
+    const isPeak = (h >= 6 && h < 9) || (h >= 17 && h < 21);
+    setPeak(isPeak);
+
+    // Token expiry countdown
+    if (tokenExpiry) {
+      const days = Math.ceil((new Date(tokenExpiry).getTime() - now.getTime()) / (86400 * 1000));
+      setDaysUntilExpiry(days);
+    }
+  }, [tokenExpiry]);
+
+  const activeVenueName = activeSession?.venues?.name ?? null;
 
   return (
     <div style={{ minHeight: '100dvh', paddingBottom: 16 }}>
@@ -37,7 +55,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
       <div style={{ padding: '20px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
         <div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 2 }}>
-            {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}
+            {greeting}
           </div>
           <div style={{ fontSize: 24, fontWeight: 500, color: '#fff', letterSpacing: '-0.02em' }}>
             Find your workout
@@ -60,7 +78,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
       )}
 
       {/* Active session banner */}
-      {activeSession && (
+      {activeSession && activeVenueName && (
         <div style={{ padding: '12px 20px 0' }}>
           <Link href="/app/session" style={{ textDecoration: 'none', display: 'block' }}>
             <div style={{
@@ -72,7 +90,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#39D98A', boxShadow: '0 0 8px #39D98A', flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, color: '#39D98A' }}>
-                  Active session — {activeSession.venues?.name}
+                  Active session — {activeVenueName}
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>Tap to show Exit QR</div>
               </div>
@@ -97,7 +115,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
                   {upcomingBooking.venues?.name}
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-                  {upcomingBooking.venue_slots?.slot_date} · {upcomingBooking.venue_slots?.start_time?.slice(0,5)}
+                  {upcomingBooking.venue_slots?.slot_date} · {upcomingBooking.venue_slots?.start_time?.slice(0, 5)}
                 </div>
               </div>
               <span style={{ fontSize: 12, color: '#6C63FF', fontWeight: 500 }}>View ›</span>
@@ -106,7 +124,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
         </div>
       )}
 
-      {/* Peak/off-peak indicator */}
+      {/* Peak/off-peak indicator — suppressed on first render to avoid hydration mismatch */}
       <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
           width: 8, height: 8, borderRadius: '50%',
@@ -122,7 +140,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
       <div style={{ padding: '16px 20px 0' }}>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', marginBottom: 12 }}>Nearby venues</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {venues.map((v: any, i: number) => {
+          {venues.map((v: any) => {
             const cost = tokenCost(v.tier, peak);
             return (
               <Link key={v.id} href={`/app/venue/${v.id}`} style={{ textDecoration: 'none' }}>
@@ -134,7 +152,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 500, color: '#fff', marginBottom: 3 }}>{v.name}</div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                        {v.city} · {v.opening_time?.slice(0,5)}–{v.closing_time?.slice(0,5)}
+                        {v.city} · {v.opening_time?.slice(0, 5)}–{v.closing_time?.slice(0, 5)}
                       </div>
                     </div>
                     <TierBadge tier={v.tier} />
@@ -188,7 +206,7 @@ export default function HomeScreen({ user, venues, tokenBalance, tokenExpiry, up
           {[
             { n: '1', text: 'Book a slot at any venue', sub: 'No tokens deducted yet' },
             { n: '2', text: 'Show Entry QR at the door', sub: 'Staff scans, session starts' },
-            { n: '3', text: 'Work out' , sub: 'Tokens deducted only at exit' },
+            { n: '3', text: 'Work out', sub: 'Tokens deducted only at exit' },
             { n: '4', text: 'Show Exit QR when leaving', sub: 'Session closes, tokens deducted' },
           ].map(item => (
             <div key={item.n} style={{

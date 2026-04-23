@@ -1,8 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
-// HMAC-SHA256 signing — same logic as packages/lib/qr/hmac.ts
-// Duplicated here so this route doesn't need the Edge runtime
 async function signPayload(payload: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -21,11 +19,14 @@ async function signPayload(payload: string, secret: string): Promise<string> {
 /**
  * POST /api/sessions/generate-entry-qr
  * Body: { bookingId: string }
- * Returns: { qrString: string, expiresAt: string }
+ * Returns: { qrString: string, expiresAt: string, venueName: string, slotStart: string }
  *
  * Generates a single-use HMAC-signed entry QR for a confirmed booking.
  * QR expires 15 minutes after slot start time.
- * Stores the hash on the booking row so we can validate later.
+ *
+ * NOTE: The QR can be generated at ANY time before the slot — the expiry is
+ * enforced at scan time by validate-scan (must scan within 15 min of slot start).
+ * This allows users to see their QR ahead of time.
  */
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -35,7 +36,6 @@ export async function POST(req: Request) {
   const { bookingId } = await req.json();
   if (!bookingId) return NextResponse.json({ error: 'Missing bookingId' }, { status: 400 });
 
-  // Fetch profile
   const { data: profile } = await supabase
     .from('users').select('id').eq('auth_id', user.id).single();
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   const { data: booking } = await supabase
     .from('bookings')
     .select(`
-      id, user_id, venue_id, status, entry_qr_used, entry_qr_expires_at, entry_qr_hash,
+      id, user_id, venue_id, status, entry_qr_used,
       venue_slots!inner(slot_date, start_time),
       venues!inner(id, name, tier)
     `)
@@ -57,28 +57,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Booking is not in confirmed state' }, { status: 409 });
   }
   if (booking.entry_qr_used) {
-    return NextResponse.json({ error: 'Entry QR already used' }, { status: 409 });
-  }
-
-  // Check if there's already a valid (non-expired) QR
-  if (booking.entry_qr_hash && booking.entry_qr_expires_at) {
-    const expiresAt = new Date(booking.entry_qr_expires_at);
-    if (expiresAt > new Date()) {
-      // Re-derive the QR string from stored hash (can't re-derive without nonce)
-      // Instead: re-generate with same expiry preserved — just return a fresh one
-      // (New QR invalidates old one since we store hash on booking)
-    }
+    return NextResponse.json({ error: 'Entry QR already used — session already started' }, { status: 409 });
   }
 
   const slot = booking.venue_slots as any;
-  // slot_date is YYYY-MM-DD and start_time is HH:MM:SS in IST (Indian Standard Time)
-  // We must interpret these as IST (UTC+5:30), not local server time (which may be UTC)
-  // Construct as IST: append +05:30 offset
+  // Interpret slot_date + start_time as IST (UTC+5:30)
   const slotDateTimeIST = `${slot.slot_date}T${slot.start_time}+05:30`;
   const slotStart = new Date(slotDateTimeIST);
-  const expiresAt = new Date(slotStart.getTime() + 15 * 60 * 1000); // +15 min
 
-  // Check if entry window is still open
+  // QR expires 15 min after slot start (enforced at scan time)
+  const expiresAt = new Date(slotStart.getTime() + 15 * 60 * 1000);
+
+  // Check if entry window has already closed
   if (expiresAt < new Date()) {
     return NextResponse.json({ error: 'Entry window has expired for this slot' }, { status: 410 });
   }
@@ -99,7 +89,7 @@ export async function POST(req: Request) {
   const signature = await signPayload(payloadStr, secret);
   const qrString = `vigor:entry:${btoa(payloadStr)}.${signature}`;
 
-  // Store hash on booking
+  // Store hash on booking (overwrites any previous hash — last generated wins)
   await supabase
     .from('bookings')
     .update({
@@ -108,10 +98,17 @@ export async function POST(req: Request) {
     })
     .eq('id', bookingId);
 
+  const minutesUntilSlot = Math.round((slotStart.getTime() - Date.now()) / 60000);
+
   return NextResponse.json({
     qrString,
     expiresAt: expiresAt.toISOString(),
     venueName: (booking.venues as any).name,
     slotStart: slotStart.toISOString(),
+    minutesUntilSlot,
+    // If slot is in the future, the QR won't be scannable yet (validate-scan checks expiry)
+    scanWindowNote: minutesUntilSlot > 15
+      ? `QR becomes scannable ${minutesUntilSlot - 0} min before slot`
+      : 'QR is ready to scan',
   });
 }

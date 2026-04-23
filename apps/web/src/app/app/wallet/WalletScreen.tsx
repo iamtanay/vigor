@@ -3,12 +3,12 @@
 import { useState } from 'react';
 
 const TYPE_LABELS: Record<string, { label: string; color: string; sign: string }> = {
-  purchase:        { label: 'Tokens purchased',   color: '#39D98A', sign: '+' },
-  deduction:       { label: 'Session',             color: '#FF6B6B', sign: '−' },
-  refund:          { label: 'Refund',              color: '#39D98A', sign: '+' },
+  purchase:        { label: 'Tokens purchased',    color: '#39D98A', sign: '+' },
+  deduction:       { label: 'Session',              color: '#FF6B6B', sign: '−' },
+  refund:          { label: 'Refund',               color: '#39D98A', sign: '+' },
   penalty:         { label: 'Cancellation penalty', color: '#FF6B6B', sign: '−' },
-  grace_deduction: { label: 'Grace period use',   color: '#FFD166', sign: '−' },
-  compensation:    { label: 'Compensation credit', color: '#39D98A', sign: '+' },
+  grace_deduction: { label: 'Grace period use',    color: '#FFD166', sign: '−' },
+  compensation:    { label: 'Compensation credit',  color: '#39D98A', sign: '+' },
 };
 
 function formatDate(iso: string) {
@@ -27,7 +27,7 @@ interface Bundle {
 interface LedgerEntry {
   id: string; type: string; amount: number; balance_after: number;
   notes: string | null; created_at: string; expires_at: string | null;
-  token_bundles: any; venues: any;
+  token_bundles: any; venues?: any;
 }
 
 interface Props {
@@ -36,14 +36,16 @@ interface Props {
   earliestExpiry: string | null;
   ledger: LedgerEntry[];
   bundles: Bundle[];
+  blockedTokens?: number;
 }
 
-export default function WalletScreen({ availableTokens, graceTokens, earliestExpiry, ledger, bundles }: Props) {
+export default function WalletScreen({ availableTokens, graceTokens, earliestExpiry, ledger, bundles, blockedTokens = 0 }: Props) {
   const [selectedBundle, setSelectedBundle] = useState<string | null>(null);
   const [purchasing, setPurchasing] = useState(false);
   const [showHistory, setShowHistory] = useState<'all' | 'credits' | 'debits'>('all');
 
   const expiryDays = earliestExpiry ? daysUntil(earliestExpiry) : null;
+  const spendable = Math.max(availableTokens - blockedTokens, 0);
 
   const filteredLedger = ledger.filter(e => {
     if (showHistory === 'credits') return e.amount > 0;
@@ -62,7 +64,6 @@ export default function WalletScreen({ availableTokens, graceTokens, earliestExp
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Purchase failed');
-      // Reload to reflect updated balance
       window.location.reload();
     } catch (err: any) {
       alert(err.message ?? 'Purchase failed. Please try again.');
@@ -95,14 +96,29 @@ export default function WalletScreen({ availableTokens, graceTokens, earliestExp
           </div>
           <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>tokens</div>
 
+          {/* Blocked tokens indicator */}
+          {blockedTokens > 0 && (
+            <div style={{
+              marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 12, color: '#FFD166' }}>
+                🔒 {blockedTokens} held for upcoming bookings
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#39D98A' }}>
+                {spendable} free
+              </span>
+            </div>
+          )}
+
           {graceTokens > 0 && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ marginTop: blockedTokens > 0 ? 6 : 12, paddingTop: 6 }}>
               <span style={{ fontSize: 12, color: '#FFD166' }}>+ {graceTokens} grace tokens (50% value)</span>
             </div>
           )}
 
           {earliestExpiry && expiryDays !== null && (
-            <div style={{ marginTop: graceTokens > 0 ? 6 : 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{
                 height: 4, flex: 1, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden',
               }}>
@@ -240,7 +256,8 @@ export default function WalletScreen({ availableTokens, graceTokens, earliestExp
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>
-                        {entry.token_bundles?.name ?? entry.venues?.name ?? meta.label}
+                        {entry.token_bundles?.name ?? meta.label}
+                        {entry.notes ? ` — ${entry.notes}` : ''}
                       </div>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
                         {formatDate(entry.created_at)}

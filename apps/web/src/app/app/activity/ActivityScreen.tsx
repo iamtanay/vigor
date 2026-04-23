@@ -16,7 +16,7 @@ function formatDateTime(iso: string | null) {
 
 function formatDateShort(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00');
-  const today = new Date(); today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
   if (d.getTime() === today.getTime()) return 'Today';
   if (d.getTime() === tomorrow.getTime()) return 'Tomorrow';
@@ -26,6 +26,7 @@ function formatDateShort(dateStr: string) {
 function sessionDuration(entry: string | null, exit: string | null): string {
   if (!entry || !exit) return '—';
   const mins = Math.round((new Date(exit).getTime() - new Date(entry).getTime()) / 60000);
+  if (mins < 1) return '<1m';
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
@@ -40,6 +41,9 @@ interface Props {
 export default function ActivityScreen({ sessions, upcomingBookings, tokenBalance, activeSession }: Props) {
   const [tab, setTab] = useState<TabType>(upcomingBookings.length > 0 ? 'upcoming' : 'history');
 
+  // venues can be a nested object from the server query
+  const activeVenueName = activeSession?.venues?.name ?? null;
+
   return (
     <div style={{ minHeight: '100dvh', paddingBottom: 16 }}>
       {/* Header */}
@@ -51,7 +55,7 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
       </div>
 
       {/* Active session banner */}
-      {activeSession && (
+      {activeSession && activeVenueName && (
         <div style={{ padding: '0 20px 16px' }}>
           <Link href="/app/session" style={{ textDecoration: 'none', display: 'block' }}>
             <div style={{
@@ -62,7 +66,9 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
             }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#39D98A', boxShadow: '0 0 8px #39D98A', flexShrink: 0 }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: '#39D98A' }}>Active session at {activeSession.venues?.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#39D98A' }}>
+                  Active session at {activeVenueName}
+                </div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
                   Tap to show Exit QR
                 </div>
@@ -81,7 +87,19 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
             background: tab === t ? '#6C63FF' : 'var(--color-card-dark)',
             color: tab === t ? '#fff' : 'rgba(255,255,255,0.45)',
             fontSize: 13, fontWeight: 500, textTransform: 'capitalize',
-          }}>{t}</button>
+          }}>
+            {t}
+            {t === 'upcoming' && upcomingBookings.length > 0 && (
+              <span style={{
+                marginLeft: 6, fontSize: 10, fontWeight: 600,
+                background: tab === t ? 'rgba(255,255,255,0.25)' : 'rgba(108,99,255,0.3)',
+                color: tab === t ? '#fff' : '#6C63FF',
+                padding: '1px 6px', borderRadius: 8,
+              }}>
+                {upcomingBookings.length}
+              </span>
+            )}
+          </button>
         ))}
       </div>
 
@@ -98,28 +116,35 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {upcomingBookings.map((b: any, i: number) => {
+              {upcomingBookings.map((b: any) => {
                 const slot = b.venue_slots;
                 const venue = b.venues;
                 const slotDt = slot ? new Date(`${slot.slot_date}T${slot.start_time}+05:30`) : null;
-                const hasEntryQR = !b.entry_qr_used && slotDt &&
-                  slotDt.getTime() <= Date.now() + 30 * 60 * 1000 &&
-                  slotDt.getTime() >= Date.now() - 15 * 60 * 1000;
+
+                // Entry window: 30 min before to 15 min after slot start
+                const now = new Date();
+                const windowOpen = slotDt ? new Date(slotDt.getTime() - 30 * 60 * 1000) : null;
+                const windowClose = slotDt ? new Date(slotDt.getTime() + 15 * 60 * 1000) : null;
+                const inEntryWindow = slotDt && windowOpen && windowClose
+                  ? now >= windowOpen && now <= windowClose
+                  : false;
+
+                const minsUntil = slotDt ? Math.round((slotDt.getTime() - now.getTime()) / 60000) : null;
 
                 return (
                   <Link key={b.id} href={`/app/booking/${b.id}`} style={{ textDecoration: 'none' }}>
                     <div className="card-enter" style={{
                       background: 'var(--color-card-dark)',
                       borderRadius: 14, padding: '14px 16px',
-                      border: hasEntryQR ? '1px solid rgba(57,217,138,0.3)' : '1px solid transparent',
+                      border: inEntryWindow ? '1px solid rgba(57,217,138,0.3)' : '1px solid transparent',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <div>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
                           <div style={{ fontSize: 15, fontWeight: 500, color: '#fff', marginBottom: 3 }}>
                             {venue?.name ?? '—'}
                           </div>
                           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                            {slot ? formatDateShort(slot.slot_date) : '—'} · {slot?.start_time?.slice(0,5)} – {slot?.end_time?.slice(0,5)}
+                            {slot ? formatDateShort(slot.slot_date) : '—'} · {slot?.start_time?.slice(0, 5)} – {slot?.end_time?.slice(0, 5)}
                           </div>
                         </div>
                         <TierBadge tier={venue?.tier} />
@@ -127,17 +152,21 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{
                           fontSize: 11, fontWeight: 500,
-                          color: b.status === 'confirmed' ? '#6C63FF' : '#FFD166',
-                          background: b.status === 'confirmed' ? 'rgba(108,99,255,0.12)' : 'rgba(255,209,102,0.12)',
+                          color: '#6C63FF',
+                          background: 'rgba(108,99,255,0.12)',
                           padding: '3px 10px', borderRadius: 10,
                         }}>
-                          {b.status}
+                          confirmed
                         </span>
-                        {hasEntryQR && (
+                        {inEntryWindow ? (
                           <span style={{ fontSize: 11, color: '#39D98A', fontWeight: 500 }}>
                             📱 Entry QR ready
                           </span>
-                        )}
+                        ) : minsUntil != null && minsUntil > 0 ? (
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                            in {minsUntil < 60 ? `${minsUntil}m` : `${Math.floor(minsUntil / 60)}h ${minsUntil % 60}m`}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </Link>
@@ -161,10 +190,8 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
             />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {sessions.map((s: any, i: number) => {
+              {sessions.map((s: any) => {
                 const venue = s.venues;
-                const booking = s.bookings;
-                const slot = booking?.venue_slots;
                 const isAutoClose = s.status === 'auto_closed';
 
                 return (
@@ -191,7 +218,7 @@ export default function ActivityScreen({ sessions, upcomingBookings, tokenBalanc
                         )}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
                         Duration: <span style={{ color: 'rgba(255,255,255,0.6)' }}>
                           {sessionDuration(s.entry_scanned_at, s.exit_scanned_at || s.auto_closed_at)}
